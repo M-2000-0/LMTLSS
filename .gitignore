@@ -1,0 +1,16 @@
+# Platform / local tooling
+.freebuff/
+
+# Runtime artifacts
+*.log
+*.pid
+*.port
+
+# OS
+.DS_Store
+Thumbs.db
+desktop.ini
+
+# Editors
+.vscode/
+.idea/

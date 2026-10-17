@@ -1,0 +1,43 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover" />
+<meta name="theme-color" content="#000000" />
+<meta name="description" content="LMTLSS — the operating system for human performance. Train, understand performance, and improve across sports." />
+<title>LMTLSS — Your performance. Without limits.</title>
+<link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Crect width='32' height='32' rx='8' fill='%23000'/%3E%3Cpath d='M9 8v12h9' stroke='%2361EB1A' stroke-width='3' fill='none' stroke-linecap='round' stroke-linejoin='round'/%3E%3Ccircle cx='23' cy='22' r='2.5' fill='%2361EB1A'/%3E%3C/svg%3E" />
+<link rel="stylesheet" href="css/tokens.css" />
+<link rel="stylesheet" href="css/app.css" />
+</head>
+<body>
+<a class="skip-link" href="#main">Skip to main content</a>
+
+<div id="app" class="app">
+  <nav id="bottom-nav" class="bottom-nav" aria-label="Primary">
+    <!-- rendered by app.js -->
+  </nav>
+
+  <main id="main" class="main" tabindex="-1">
+    <!-- screens render here -->
+    <div class="boot-screen" aria-hidden="true">
+      <div class="boot-mark"></div>
+    </div>
+  </main>
+</div>
+
+<div id="overlay-root"></div>
+<div id="toast-root" class="toast-root" role="status" aria-live="polite"></div>
+
+<script src="js/store.js"></script>
+<script src="js/domain.js"></script>
+<script src="js/ui.js"></script>
+<script src="js/onboarding.js"></script>
+<script src="js/screens-home.js"></script>
+<script src="js/screens-train.js"></script>
+<script src="js/screens-progress.js"></script>
+<script src="js/screens-coach.js"></script>
+<script src="js/screens-profile.js"></script>
+<script src="js/app.js"></script>
+</body>
+</html>
