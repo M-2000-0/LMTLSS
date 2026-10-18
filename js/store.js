@@ -5,7 +5,11 @@
   "use strict";
 
   const STORAGE_KEY = "lmtlss:v1";
+  const QUARANTINE_KEY = STORAGE_KEY + ":quarantine";
   const SCHEMA_VERSION = 1;
+  /* MIGRATIONS[n] upgrades a version-n payload to version n+1.
+     A version bump MUST add the matching step here — data is never discarded. */
+  const MIGRATIONS = {};
 
   function uid(prefix) {
     return prefix + "_" + Date.now().toString(36) + Math.random().toString(36).slice(2, 7);
@@ -21,6 +25,7 @@
       version: SCHEMA_VERSION,
       profile: null, // set by onboarding
       plan: { sessions: [] }, // recurring weekly template
+      weekPlan: null, // adaptive adjustment for one week {weekStart, moves, dropped, changes, summary} — additive field, old payloads just miss it
       log: [], // completed sessions
       readiness: [], // {date, energy:1-5, soreness:1-5, note}
       hydration: [], // {date, ml}
@@ -35,20 +40,72 @@
   const listeners = new Set();
 
   function load() {
+    let raw;
     try {
-      const raw = localStorage.getItem(STORAGE_KEY);
-      if (!raw) return emptyState();
-      const parsed = JSON.parse(raw);
-      if (!parsed || parsed.version !== SCHEMA_VERSION) return emptyState();
-      // merge defaults for forward-compat
-      const base = emptyState();
-      return Object.assign(base, parsed, {
-        settings: Object.assign(base.settings, parsed.settings || {})
-      });
+      raw = localStorage.getItem(STORAGE_KEY);
     } catch (e) {
-      console.warn("LMTLSS: failed to load state, starting fresh", e);
+      console.warn("LMTLSS: storage unavailable, running in memory", e);
       return emptyState();
     }
+    if (!raw) return emptyState();
+    let parsed;
+    try {
+      parsed = JSON.parse(raw);
+    } catch (e) {
+      quarantine(raw, "unparseable JSON");
+      return emptyState();
+    }
+    const out = migrate(parsed);
+    if (out.quarantine) quarantine(raw, out.quarantine);
+    return out.state;
+  }
+
+  /* Unreadable data is preserved under a side key, never destroyed —
+     a newer app version (or a repair) may still be able to read it. */
+  function quarantine(raw, reason) {
+    try {
+      localStorage.setItem(QUARANTINE_KEY, JSON.stringify({
+        reason: reason,
+        at: new Date().toISOString(),
+        payload: raw
+      }));
+      console.warn("LMTLSS: unreadable data preserved under " + QUARANTINE_KEY + " (" + reason + ")");
+    } catch (e) {
+      console.error("LMTLSS: could not quarantine data", e);
+    }
+  }
+
+  /* Pure: parsed payload -> {state} or {state: fresh, quarantine: reason}.
+     Never throws, never discards silently. */
+  function migrate(parsed) {
+    if (!parsed || typeof parsed !== "object" || Array.isArray(parsed)) {
+      return { state: emptyState(), quarantine: "payload is not an object" };
+    }
+    if (typeof parsed.version !== "number" || parsed.version < 1) {
+      return { state: emptyState(), quarantine: "missing or invalid version" };
+    }
+    if (parsed.version > SCHEMA_VERSION) {
+      return { state: emptyState(), quarantine: "written by a newer version (v" + parsed.version + ")" };
+    }
+    let cur = parsed;
+    for (let v = parsed.version; v < SCHEMA_VERSION; v++) {
+      const step = MIGRATIONS[v];
+      if (!step) return { state: emptyState(), quarantine: "no migration path from v" + parsed.version };
+      cur = step(cur);
+    }
+    cur.version = SCHEMA_VERSION;
+    const base = emptyState();
+    return {
+      state: Object.assign(base, cur, {
+        settings: Object.assign(base.settings, cur.settings || {})
+      })
+    };
+  }
+
+  /* Re-read storage, discarding the in-memory copy (used by tests). */
+  function reload() {
+    state = load();
+    return state;
   }
 
   function persist() {
@@ -56,7 +113,9 @@
       localStorage.setItem(STORAGE_KEY, JSON.stringify(state));
     } catch (e) {
       console.error("LMTLSS: failed to persist", e);
-      UI.toast("Couldn't save locally. Storage may be full.", { error: true });
+      if (typeof UI !== "undefined" && UI && typeof UI.toast === "function") {
+        UI.toast("Couldn't save locally. Storage may be full.", { error: true });
+      }
     }
   }
 
@@ -91,6 +150,12 @@
 
   function savePlan(sessions) {
     set(function (s) { s.plan.sessions = sessions; });
+  }
+
+  /* Adaptive calendar: this week's adjustment (apply, revise or dismiss).
+     Never touches state.plan — the generated template stays intact. */
+  function saveWeekPlan(entry) {
+    set(function (s) { s.weekPlan = entry; });
   }
 
   /* ---------- Completed sessions ---------- */
@@ -277,6 +342,7 @@
     todayISO: todayISO,
     setProfile: setProfile,
     savePlan: savePlan,
+    saveWeekPlan: saveWeekPlan,
     addSession: addSession,
     deleteSession: deleteSession,
     saveActive: saveActive,
@@ -288,6 +354,8 @@
     updateSettings: updateSettings,
     exportJSON: exportJSON,
     resetAll: resetAll,
-    seedDemo: seedDemo
+    seedDemo: seedDemo,
+    migrate: migrate,
+    reload: reload
   };
 })();

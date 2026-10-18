@@ -22,6 +22,10 @@
       ])
     ]));
 
+    /* 0. Adaptive week — explainable suggestions or applied changes */
+    const adapt = adaptiveCard(state, ctx);
+    if (adapt) screen.appendChild(adapt);
+
     /* 1. Next session — the one clear priority */
     const next = Domain.nextPlannedSession(state);
     if (next) {
@@ -174,6 +178,131 @@
       ]),
       r && r.energy <= 2 ? el("p", { class: "small accent mt-3", text: "Low energy flagged — coaching will suggest an easier session today." }) : null
     ]);
+  }
+
+  function currentWeekPlan(state) {
+    const wp = state.weekPlan;
+    if (!wp || wp.weekStart !== Domain.weekStartISO()) return null;
+    return wp;
+  }
+
+  function changeRow(c) {
+    return el("div", { class: "insight-line mb-3" }, [
+      el("span", { class: "il-icon" }, [UI.icon(c.trigger === "readiness" ? "heart" : c.kind === "defer" ? "clock" : "swap")]),
+      el("div", {}, [
+        el("p", { class: "il-text" }, [el("strong", { text: c.text + ". " }), c.why]),
+        el("p", { class: "micro muted-2 mt-2", text: c.source })
+      ])
+    ]);
+  }
+
+  function adaptiveCard(state, ctx) {
+    const wp = currentWeekPlan(state);
+    if (wp && wp.dismissed) return null; // user kept their plan this week
+    const proposal = Domain.rebalanceWeek(state);
+    if (proposal.changes.length) return proposalCard(proposal, wp, ctx);
+    if (wp && ((wp.changes && wp.changes.length) || (wp.dropped && wp.dropped.length))) return appliedCard(wp, ctx);
+    return null;
+  }
+
+  function proposalCard(proposal, prior, ctx) {
+    const ws = Domain.weekStartISO();
+    const n = proposal.changes.length;
+    const label = n === 1 ? "1 suggested change" : n + " suggested changes";
+    return el("div", { class: "card mb-4" }, [
+      el("div", { class: "row-between" }, [
+        el("span", { class: "eyebrow", text: prior ? "Adaptive week · additions" : "Adaptive week" }),
+        el("span", { class: "badge" }, [UI.icon("swap"), "SUGGESTED"])
+      ]),
+      el("p", { class: "small mt-4", text: proposal.summary }),
+      el("p", { class: "micro muted-2 mt-2", text: "Nothing changes until you apply it — your generated template stays intact, and this only affects this week." }),
+      el("button", {
+        class: "btn btn-secondary btn-block mt-4",
+        onclick: function () {
+          const body = [el("p", { class: "small muted mb-4", text: proposal.summary })]
+            .concat(proposal.changes.map(changeRow))
+            .concat([
+              el("button", {
+                class: "btn btn-primary btn-lg btn-block mt-4",
+                onclick: function () { applyProposal(proposal, prior, ws); }
+              }, [UI.icon("check"), "Apply to this week"]),
+              el("button", {
+                class: "btn btn-ghost btn-block mt-3",
+                text: "Keep my plan as is",
+                onclick: function () {
+                  dismissWeek(ws, "No changes applied — suggestions stay off for this week.");
+                }
+              })
+            ]);
+          UI.sheet("Review changes for this week", body);
+        }
+      }, [UI.icon("swap"), "Review changes (" + n + ")"])
+    ]);
+  }
+
+  function applyProposal(proposal, prior, ws) {
+    const keep = prior && !prior.dismissed ? prior : null;
+    const moves = Object.assign({}, (keep && keep.moves) || {}, proposal.moves);
+    const dropped = ((keep && keep.dropped) || []).slice();
+    proposal.dropped.forEach(function (id) { if (dropped.indexOf(id) < 0) dropped.push(id); });
+    const changes = ((keep && keep.changes) || []).slice().concat(proposal.changes);
+    Store.saveWeekPlan({
+      weekStart: ws,
+      moves: moves,
+      dropped: dropped,
+      changes: changes,
+      summary: proposal.summary,
+      appliedAt: new Date().toISOString()
+    });
+    UI.closeSheet();
+    UI.toast((proposal.changes.length === 1 ? "1 change" : proposal.changes.length + " changes") + " applied to this week. Your template is unchanged.");
+    window.App.rerender();
+  }
+
+  function dismissWeek(ws, msg) {
+    Store.saveWeekPlan({ weekStart: ws, dismissed: true, dismissedAt: new Date().toISOString() });
+    UI.closeSheet();
+    UI.toast(msg || "Kept as is.");
+    window.App.rerender();
+  }
+
+  function appliedCard(wp, ctx) {
+    const n = (wp.changes || []).length;
+    return el("div", { class: "card mb-4" }, [
+      el("div", { class: "row-between" }, [
+        el("span", { class: "eyebrow", text: "This week, adapted" }),
+        el("span", { class: "badge badge-accent" }, [UI.icon("check"), "APPLIED"])
+      ]),
+      el("p", { class: "small mt-4", text: wp.summary || ((n === 1 ? "1 change" : n + " changes") + " applied this week.") }),
+      el("p", { class: "micro muted-2 mt-2", text: "This week only — next week returns to your generated template." }),
+      el("div", { class: "row mt-4", style: "gap:8px" }, [
+        el("button", {
+          class: "btn btn-ghost btn-sm",
+          onclick: function () { showReasons(wp); }
+        }, [UI.icon("info"), "Why?"]),
+        el("button", {
+          class: "btn btn-ghost btn-sm",
+          text: "Revert to template",
+          onclick: function () {
+            UI.confirmSheet(
+              "Revert this week?",
+              "Restore the generated template for this week. Adaptive suggestions stay off until next week.",
+              "Revert",
+              function () { dismissWeek(Domain.weekStartISO(), "Template restored for this week."); }
+            );
+          }
+        })
+      ])
+    ]);
+  }
+
+  function showReasons(wp) {
+    const rows = (wp.changes || []).map(changeRow);
+    if (!rows.length) rows.push(el("p", { class: "small muted", text: "No recorded changes." }));
+    UI.sheet("Why this week changed", [
+      el("p", { class: "small muted mb-4", text: wp.summary || "" }),
+      el("p", { class: "micro muted-2 mb-4", text: wp.appliedAt ? "Applied " + Domain.relDay(wp.appliedAt) + "." : "" })
+    ].concat(rows));
   }
 
   function insightCard(insight) {

@@ -18,15 +18,9 @@
     // Resume an in-flight session (e.g. after refresh). If the page was left
     // open longer than 10 minutes, freeze the clock so idle time isn't counted.
     if (state.activeSession && (!session || session.id !== state.activeSession.id)) {
-      session = state.activeSession;
-      const updated = session.updatedAt || 0;
-      const gap = Date.now() - updated;
-      if (updated && gap > 10 * 60 * 1000) {
-        if (!session.paused) {
-          session.elapsedBase += Math.max(0, updated - session.startMs);
-          session.paused = true;
-        }
-        session.startMs = Date.now();
+      const resumed = Domain.resumeSession(state.activeSession, Date.now());
+      session = resumed.session;
+      if (resumed.frozen) {
         Store.saveActive(session);
         UI.toast("Session resumed paused — the clock stopped while the app was closed.");
       }
@@ -54,23 +48,32 @@
     if (plan.length) {
       screen.appendChild(el("div", { class: "section-head" }, [el("h2", { class: "section-title", text: "Your week" })]));
       const panel = el("div", { class: "panel" });
-      // Put today's session first
+      // This week's live adjustment (missed/readiness moves), if applied
+      const wp = state.weekPlan && !state.weekPlan.dismissed && state.weekPlan.weekStart === Domain.weekStartISO() ? state.weekPlan : null;
+      const effOf = function (s) { return Domain.effectivePlanDay(s, state); };
+      const droppedOf = function (s) { return !!(wp && wp.dropped && wp.dropped.indexOf(s.id) >= 0); };
+      // Put today's session first (adjustment-aware)
       const ordered = plan.slice().sort(function (a, b) {
-        return (a.day === today ? 0 : 1) - (b.day === today ? 0 : 1);
+        const rank = function (s) { return droppedOf(s) ? 1 : (effOf(s) === today ? 0 : 1); };
+        return rank(a) - rank(b);
       });
       ordered.forEach(function (s) {
-        const isToday = s.day === today;
+        const isDropped = droppedOf(s);
+        const eff = isDropped ? s.day : effOf(s);
+        const isToday = !isDropped && eff === today;
+        const moved = !isDropped && eff !== s.day;
         panel.appendChild(el("button", {
           class: "panel-row",
           onclick: function () { startPlanSession(s, ctx); }
         }, [
           el("div", { class: "row" }, [
-            el("span", { class: "badge" + (isToday ? " badge-accent" : ""), text: isToday ? "TODAY" : s.day }),
+            el("span", { class: "badge" + (isToday ? " badge-accent" : ""), text: isDropped ? "SKIPPED" : isToday ? "TODAY" : eff }),
             el("div", {}, [
               el("div", { style: "font-weight:650", text: s.title }),
-              el("div", { class: "micro muted-2 mt-2", text: s.sport === "running"
+              el("div", { class: "micro muted-2 mt-2", text: (s.sport === "running"
                 ? (s.estMinutes || 30) + " min run"
-                : UI.plural((s.exercises || []).length, "exercise") + " · ~" + (s.estMinutes || 50) + " min" })
+                : UI.plural((s.exercises || []).length, "exercise") + " · ~" + (s.estMinutes || 50) + " min") +
+                (isDropped ? " · out of this week — next week's template returns" : moved ? " · moved from " + s.day : "") })
             ])
           ]),
           UI.icon("play")
@@ -137,6 +140,7 @@
       id: Store.uid("live"),
       sport: tpl.sport,
       title: tpl.title,
+      planId: tpl.id || null, // links the finished log entry to this plan item
       startedAt: new Date().toISOString(),
       startMs: Date.now(),
       elapsedBase: 0,
@@ -533,7 +537,7 @@
   }
 
   function liveElapsed() {
-    return Math.floor((session.elapsedBase + (session.paused ? 0 : Date.now() - session.startMs)) / 1000);
+    return Domain.elapsedSec(session);
   }
 
   function startTicker() {
@@ -601,6 +605,7 @@
         completeSession({
           sport: "strength",
           title: session.title,
+          planId: session.planId || undefined,
           startedAt: session.startedAt,
           durationSec: elapsed,
           notes: notes.value || "",
@@ -656,6 +661,7 @@
         completeSession({
           sport: "running",
           title: session.title === "Free Run" ? (session.distanceM && session.distanceM >= 8000 ? "Long Run" : "Easy Run") : session.title,
+          planId: session.planId || undefined,
           startedAt: session.startedAt,
           durationSec: elapsed,
           distanceM: session.distanceM,
