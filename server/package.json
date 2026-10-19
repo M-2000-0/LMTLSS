@@ -1,0 +1,13 @@
+{
+  "name": "@lmtlss/server",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "description": "LMTLSS API — dependency-free Cloudflare Worker + D1. Run locally with node --test; deploy with wrangler.",
+  "scripts": {
+    "test": "node --test tests/",
+    "check": "node --check src/worker.js && node --check src/api.js"
+  },
+  "dependencies": {},
+  "devDependencies": {}
+}

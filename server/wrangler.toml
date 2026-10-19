@@ -1,0 +1,42 @@
+# LMTLSS API — Cloudflare Worker + D1.
+#
+# Nothing here is deployed: this file exists so the backend can be run and
+# tested locally today, and deployed by you when you have the D1 database id.
+# Fill `database_id` after `wrangler d1 create lmtlss` and keep secrets in
+# `wrangler secret put` (never in this file, never in git).
+#
+#   npx wrangler dev --local            # run the API against a local D1
+#   npx wrangler d1 execute lmtlss --local --file=server/schema/0001_init.sql
+#   npx wrangler secret put AUTH_JWT_SECRET
+#   npx wrangler secret put STRIPE_WEBHOOK_SECRET   # when payments land
+#
+# The web app has no build step, so `assets.directory` points straight at the
+# static files; deploying serves app + API from one origin.
+
+name = "lmtlss-api"
+main = "src/worker.js"
+compatibility_date = "2026-10-01"
+
+[observability]
+enabled = true
+
+[[d1_databases]]
+binding = "DB"
+database_name = "lmtlss"
+database_id = ""
+migrations_dir = "schema"
+
+# Static assets: the Worker serves whatever `ASSETS` holds (see src/worker.js).
+# The web app has no build step, so a deployment step must copy the static files
+# (index.html, css/, js/, logo/) into a dedicated public directory first — never
+# point ASSETS at the repository root, which would publish server/ and docs/.
+# [assets]
+# directory = "./public"
+# binding = "ASSETS"
+
+[vars]
+# Non-secret configuration only.
+AUTH_ISSUER = ""
+AUTH_AUDIENCE = "lmtlss-api"
+# Set only if the web app is served from a different origin than the API.
+ALLOWED_ORIGIN = ""
