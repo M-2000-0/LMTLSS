@@ -27,7 +27,7 @@
     }
 
     if (session) {
-      session.sport === "running" ? renderRunning(container, ctx) : renderStrength(container, ctx);
+      isTimedSession(session) ? renderRunning(container, ctx) : renderStrength(container, ctx);
       startTicker();
       return;
     }
@@ -95,13 +95,17 @@
       el("div", { class: "grid-2" }, [
         el("button", {
           class: "btn btn-secondary", style: "min-height:64px",
-          onclick: function () { startFreeSession("strength", ctx); }
-        }, [UI.icon("dumbbell"), "Free strength"]),
+          onclick: function () { startSport("strength", ctx); }
+        }, [UI.icon("dumbbell"), "Strength"]),
         el("button", {
           class: "btn btn-secondary", style: "min-height:64px",
-          onclick: function () { startFreeSession("running", ctx); }
-        }, [UI.icon("run"), "Free run"])
-      ])
+          onclick: function () { startSport("running", ctx); }
+        }, [UI.icon("run"), "Run"])
+      ]),
+      el("button", {
+        class: "btn btn-ghost btn-block mt-3",
+        onclick: function () { pickSport(ctx); }
+      }, [UI.icon("plus"), "All " + Domain.SPORTS.length + " sports"])
     ]));
 
     /* Recent sessions */
@@ -128,10 +132,11 @@
   }
 
   function todayName() {
-    return ["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"][new Date().getDay()];
+    const idx = new Date().getDay();
+    return ["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"][idx];
   }
 
-  /* ---------- Session creation ---------- */
+  /* ---------- Session start ---------- */
 
   function startPlanSession(tpl, ctx) {
     const state = Store.get();
@@ -148,7 +153,14 @@
       exercises: [],
       distanceM: null,
       distanceSource: null,
-      plannedMinutes: tpl.estMinutes || null
+      plannedMinutes: tpl.estMinutes || null,
+      intervalTemplate: tpl.intervalTemplate ? {
+        name: tpl.intervalTemplate.name,
+        segments: tpl.intervalTemplate.segments.map(function (seg, i) {
+          return { index: i, segmentType: seg.segmentType, targetDurationSec: seg.targetDurationSec, durationSec: null, done: false };
+        })
+      } : null,
+      intervalSegments: (tpl.intervalTemplate && tpl.intervalTemplate.segments.length) ? [] : []
     };
     if (tpl.sport === "strength") {
       session.exercises = (tpl.exercises || []).map(function (e) {
@@ -168,11 +180,51 @@
     window.App.rerender();
   }
 
-  function startFreeSession(sport, ctx) {
+  /* ---------- Sport picker (every sport is startable) ---------- */
+
+  function pickSport(ctx) {
+    const groups = [
+      ["endurance", "Endurance"], ["strength", "Strength"], ["combat", "Combat"],
+      ["racket", "Racket"], ["precision", "Precision"], ["team", "Team"], ["other", "Other"]
+    ];
+    const body = [el("p", { class: "small muted mb-3", text: "Pick a sport. Timed sports start a live clock; the rest take a short manual entry — nothing is measured for you." })];
+    groups.forEach(function (g) {
+      const sports = Domain.sportsInGroup(g[0]);
+      if (!sports.length) return;
+      body.push(el("div", { class: "eyebrow mt-4 mb-2", text: g[1] }));
+      body.push(el("div", { class: "chip-row" }, sports.map(function (s) {
+        return el("button", {
+          class: "chip", text: s.label,
+          onclick: function () { UI.closeSheet(); startSport(s.id, ctx); }
+        });
+      })));
+    });
+    UI.sheet("Choose a sport", body);
+  }
+
+  /* Timed sports get the live clock; the rest are entered after the fact. */
+  const TIMED_SPORTS = ["running", "cycling", "swimming"];
+
+  /* A live session is timed when its sport runs on a clock. Older saved
+     sessions predate the sport model but only ever used strength/running. */
+  function isTimedSession(s) {
+    if (!s) return false;
+    return TIMED_SPORTS.indexOf(s.sport) >= 0;
+  }
+
+  function startSport(sportId, ctx) {
+    const sport = Domain.sportById(sportId);
+    if (!sport) { UI.toast("That sport isn't available.", { error: true }); return; }
+    if (sport.id === "strength") { startFreeSession("strength", ctx); return; }
+    if (TIMED_SPORTS.indexOf(sport.id) >= 0) { startTimedSport(sport, ctx); return; }
+    manualSportEntry(sport, ctx);
+  }
+
+  function startTimedSport(sport, ctx) {
     session = {
       id: Store.uid("live"),
-      sport: sport,
-      title: sport === "running" ? "Free Run" : "Free Strength",
+      sport: sport.id,
+      title: sport.label,
       startedAt: new Date().toISOString(),
       startMs: Date.now(),
       elapsedBase: 0,
@@ -180,7 +232,95 @@
       exercises: [],
       distanceM: null,
       distanceSource: null,
-      plannedMinutes: null
+      plannedMinutes: null,
+      intervalTemplate: null,
+      intervalSegments: []
+    };
+    Store.saveActive(session);
+    window.App.rerender();
+  }
+
+  /* Manual entry for sports the app cannot observe: the athlete types what
+     happened, and only the metrics their sport actually records are offered. */
+  function manualSportEntry(sport, ctx) {
+    const defs = Domain.metricDefs(sport.id).filter(function (d) {
+      return ["durationSec", "pace", "speed"].indexOf(d.key) < 0;
+    });
+    const fields = {};
+    const body = [
+      el("p", { class: "small muted mb-3", text: "Nothing is measured automatically for " + sport.label + ". Enter what you did — blank fields stay blank." })
+    ];
+
+    function addField(def) {
+      const isText = def.kind === "text";
+      const isDuration = def.kind === "duration";
+      const input = el("input", {
+        class: "input" + (isText ? "" : " input-num"),
+        type: isText ? "text" : "number",
+        inputmode: isText ? "text" : "numeric",
+        min: "0",
+        step: isDuration ? "1" : "1",
+        placeholder: isText ? "Optional" : (isDuration ? "Minutes" : "Optional"),
+        "aria-label": def.label
+      });
+      fields[def.key] = { def: def, input: input };
+      body.push(el("label", { class: "field mb-3" }, [
+        el("span", { class: "field-label", text: def.label + (isDuration ? " (minutes)" : "") }),
+        input
+      ]));
+    }
+
+    addField({ key: "durationSec", label: "Duration", kind: "duration" });
+    defs.forEach(addField);
+
+    body.push(el("button", {
+      class: "btn btn-primary btn-lg btn-block mt-4",
+      onclick: function () {
+        const activity = { sport: sport.id };
+        Object.keys(fields).forEach(function (key) {
+          const f = fields[key];
+          const raw = String(f.input.value || "").trim();
+          if (!raw) return;
+          if (f.def.kind === "text") { activity[key] = raw; return; }
+          const n = parseFloat(raw);
+          if (isNaN(n)) return;
+          activity[key] = f.def.kind === "duration" ? Math.round(n * 60) : n;
+        });
+        const check = Domain.validateActivity(activity);
+        if (!check.ok) {
+          UI.toast(check.errors[0].message, { error: true });
+          return;
+        }
+        if (!activity.durationSec && activity.durationSec !== 0) {
+          UI.toast("Add how long the session lasted.", { error: true });
+          return;
+        }
+        const record = { sport: sport.id, title: sport.label, startedAt: new Date().toISOString(), provenance: "manual", exercises: [] };
+        Object.keys(activity).forEach(function (k) { if (k !== "sport") record[k] = activity[k]; });
+        UI.closeSheet();
+        completeSession(record, ctx, 1);
+      }
+    }, [UI.icon("check"), "Save " + sport.label.toLowerCase()]));
+
+    body.push(el("button", { class: "btn btn-ghost btn-block mt-3", text: "Cancel", onclick: UI.closeSheet }));
+    UI.sheet(sport.label, body);
+  }
+
+  function startFreeSession(sport, ctx) {
+    session = {
+      id: Store.uid("live"),
+      sport: sport,
+      title: sport === "running" ? "Run" : "Strength",
+      startedAt: new Date().toISOString(),
+      startMs: Date.now(),
+      elapsedBase: 0,
+      paused: false,
+      exercises: [],
+      distanceM: null,
+      distanceSource: null,
+      plannedMinutes: null,
+      intervalTemplate: null,
+      intervalSegments: []
     };
     Store.saveActive(session);
     window.App.rerender();
@@ -287,15 +427,12 @@
                 st.done = !st.done;
                 save();
                 if (st.done) startRest();
-                window.App.rerender();
               }
             }, [UI.icon("check")])
           ])
         ]);
       }))
     ]);
-
-    function save() { Store.saveActive(session); }
 
     return el("div", { class: "exercise-block mb-3" }, [head, table]);
   }
@@ -314,12 +451,18 @@
     return input;
   }
 
+  function save() {
+    Store.saveActive(session);
+    window.App.rerender();
+  }
+
   function lastPerformed(name) {
     const state = Store.get();
-    const done = state.log.filter(function (s) { return s.sport === "strength"; })
-      .sort(function (a, b) { return a.startedAt < b.startedAt ? 1 : -1; });
-    for (let i = 0; i < done.length; i++) {
-      const ex = (done[i].exercises || []).find(function (e) { return e.name === name; });
+    const sessions = (state.log || []).filter(function (s) {
+      return s.sport === "strength" && s.exercises;
+    }).sort(function (a, b) { return a.startedAt > b.startedAt ? -1 : 1; });
+    for (let i = 0; i < sessions.length; i++) {
+      const ex = (sessions[i].exercises || []).find(function (e) { return e.name === name; });
       if (ex && ex.sets && ex.sets.length) {
         const top = ex.sets.reduce(function (m, st) { return (st.load || 0) > (m.load || 0) ? st : m; }, ex.sets[0]);
         return ex.sets.length + "×" + top.reps + (top.load ? " @ " + top.load + " kg" : " BW");
@@ -461,18 +604,29 @@
     const wrap = el("div", { class: "session-live" });
     const inner = el("div", { class: "session-live-inner" });
 
+    const toggleRun = function () {
+      if (session.paused) {
+        session.startMs = Date.now();
+        session.paused = false;
+      } else {
+        session.elapsedBase += Date.now() - session.startMs;
+        session.paused = true;
+      }
+      Store.saveActive(session);
+      window.App.rerender();
+    };
+
     inner.appendChild(el("div", { class: "row-between mb-6" }, [
       el("div", { class: "eyebrow", text: session.title }),
       el("button", {
         class: "icon-btn", "aria-label": session.paused ? "Resume run" : "Pause run",
-        onclick: function () {
-          if (session.paused) { session.startMs = Date.now(); session.paused = false; }
-          else { session.elapsedBase += Date.now() - session.startMs; session.paused = true; }
-          Store.saveActive(session);
-          window.App.rerender();
-        }
+        onclick: toggleRun
       }, [UI.icon(session.paused ? "play" : "pause")])
     ]));
+
+    /* Record segments whose target time has elapsed, so the summary only ever
+       reports work the runner actually did. */
+    syncIntervalProgress();
 
     inner.appendChild(el("div", { class: "timer-big num" + (session.paused ? " muted-2" : ""), id: "live-timer", text: "0:00" }));
 
@@ -485,10 +639,82 @@
         el("div", { class: "metric-small num", style: "font-weight:700", id: "live-dist", text: Domain.fmtDist(session.distanceM, (Store.get().settings || {}).unit) })
       ]),
       el("div", { class: "center" }, [
-        el("div", { class: "metric-label", text: "Avg pace" }),
-        el("div", { class: "metric-small num", style: "font-weight:700", id: "live-pace", text: pace ? Domain.fmtPace(pace) : "—" })
+        el("div", { class: "metric-label", text: session.sport === "cycling" ? "Avg speed" : "Avg pace" }),
+        el("div", { class: "metric-small num", style: "font-weight:700", id: "live-pace", text: paceValue(elapsedSec, session.distanceM, session.sport) })
       ])
     ]));
+    if (session.intervalTemplate && session.intervalTemplate.segments.length) {
+      inner.appendChild(el("div", { class: "row mt-4", style: "justify-content:center;gap:32px" }, [
+        el("div", { class: "center" }, [
+          el("div", { class: "metric-label", text: "This segment" }),
+          el("div", { class: "metric-small num", style: "font-weight:700", id: "interval-seg-time", text: "—" })
+        ])
+      ]));
+    }
+
+    /* Current interval segment card */
+    (function () {
+      if (!session.intervalTemplate || !session.intervalTemplate.segments.length) return;
+      const idx = currentSegmentIndex();
+      const tmpl = session.intervalTemplate.segments;
+      if (idx < tmpl.length) {
+        const seg = tmpl[idx];
+        const remaining = Math.max(0, seg.targetDurationSec - elapsedInSegment(idx));
+        inner.appendChild(el("div", { class: "card mt-4" }, [
+          el("div", { class: "eyebrow mb-2", text: "Current segment" }),
+          el("div", { class: "row-between" }, [
+            el("div", {}, [
+              el("div", { class: "metric-label", text: seg.segmentType === "work" ? "Work" : "Rest" }),
+              el("div", { class: "metric-small num", style: "font-weight:700", text: (idx + 1) + "/" + tmpl.length })
+            ]),
+            el("div", { class: "center" }, [
+              el("div", { class: "metric-label", text: "Remaining" }),
+              el("div", { class: "metric-small num", style: "font-weight:700", text: Domain.fmtDur(remaining) })
+            ])
+          ]),
+          el("p", { class: "small muted mt-2", text: seg.segmentType === "work"
+            ? "Run the target, or tap done when you cut it short — only recorded segments count."
+            : "Recover here; the next segment starts after this timer clears." }),
+          el("button", {
+            class: "btn btn-ghost btn-sm btn-block mt-3", text: "Segment done",
+            onclick: function () {
+              if (recordIntervalSegment()) window.App.rerender();
+            }
+          })
+        ]));
+      } else {
+        inner.appendChild(el("div", { class: "card mt-4" }, [
+          el("p", { class: "small muted", text: "All " + tmpl.length + " segments recorded. Finish the run when you're ready." })
+        ]));
+      }
+    })();
+
+    /* Structured targets for planned runs */
+    if (session.plannedMinutes && session.title === "Long Run" && !(session.intervalTemplate && session.intervalTemplate.segments.length)) {
+      inner.appendChild(el("div", { class: "insight-line mt-4" }, [
+        el("span", { class: "il-icon" }, [UI.icon("info")]),
+        el("div", {}, [el("p", { class: "il-text", text: "Target: " + session.plannedMinutes + " minutes at a pace you could hold a conversation at. Time matters more than speed on this one." })])
+      ]));
+    }
+
+    /* Structured targets for interval runs */
+    if (session.intervalTemplate && session.intervalTemplate.segments.length) {
+      inner.appendChild(el("div", { class: "insight-line mt-4" }, [
+        el("span", { class: "il-icon" }, [UI.icon("info")]),
+        el("div", {}, [el("p", { class: "il-text", text: "Intervals: " + session.intervalTemplate.name + ". Run the work segments, recover in the rest segments, then finish when the session is done." })])
+      ]));
+      const currentIdx = currentSegmentIndex();
+      if (currentIdx < session.intervalTemplate.segments.length) {
+        const nextSeg = session.intervalTemplate.segments[currentIdx];
+        const cue = nextSeg.segmentType === "work"
+          ? "Next up: work segment " + (currentIdx + 1) + " of " + session.intervalTemplate.segments.length + "."
+          : "Next up: rest segment " + (currentIdx + 1) + " of " + session.intervalTemplate.segments.length + ".";
+        inner.appendChild(el("div", { class: "insight-line mt-3" }, [
+          el("span", { class: "il-icon" }, [UI.icon(nextSeg.segmentType === "work" ? "bolt" : "clock")]),
+          el("div", {}, [el("p", { class: "il-text", text: cue })])
+        ]));
+      }
+    }
 
     /* Distance entry — manual, honestly labeled */
     inner.appendChild(el("div", { class: "card mt-6" }, [
@@ -512,14 +738,6 @@
       ])
     ]));
 
-    /* Structured targets for planned runs */
-    if (session.plannedMinutes && session.title === "Long Run") {
-      inner.appendChild(el("div", { class: "insight-line mt-4" }, [
-        el("span", { class: "il-icon" }, [UI.icon("info")]),
-        el("div", {}, [el("p", { class: "il-text", text: "Target: " + session.plannedMinutes + " minutes at a pace you could hold a conversation at. Time matters more than speed on this one." })])
-      ]));
-    }
-
     container.appendChild(wrap);
     wrap.appendChild(inner);
     wrap.appendChild(dock([
@@ -540,21 +758,31 @@
     return Domain.elapsedSec(session);
   }
 
+  /* Pace for runners and swimmers, speed for cyclists — both derived from the
+     same two inputs, and "—" when either is missing. */
+  function paceValue(durationSec, distanceM, sportId) {
+    if (!durationSec || !distanceM) return "—";
+    if (sportId === "cycling") {
+      return ((distanceM / 1000) / (durationSec / 3600)).toFixed(1) + " km/h";
+    }
+    return Domain.fmtPace(durationSec / (distanceM / 1000));
+  }
+
   function startTicker() {
     stopTicker();
     tick = setInterval(function () {
       const node = document.getElementById("live-timer");
-      if (node) node.textContent = fmtClock(liveElapsed());
+    if (node) node.textContent = fmtClock(liveElapsed());
+    if (syncIntervalProgress()) { window.App.rerender(); return; }
       updateRunStats();
     }, 1000);
     const node = document.getElementById("live-timer");
     if (node) node.textContent = fmtClock(liveElapsed());
   }
 
-  /* Live distance/pace display for running — updates without re-rendering the input */
   function updateRunStats() {
     const distNode = document.getElementById("live-dist");
-    if (!distNode || !session || session.sport !== "running") return;
+    if (!distNode || !session || !isTimedSession(session)) return;
     const unit = (Store.get().settings || {}).unit;
     distNode.textContent = Domain.fmtDist(session.distanceM, unit);
     const paceNode = document.getElementById("live-pace");
@@ -564,6 +792,69 @@
         ? Domain.fmtPace(elapsed / (session.distanceM / 1000))
         : "—";
     }
+    if (session.intervalTemplate && session.intervalTemplate.segments.length) {
+      const segTimeNode = document.getElementById("interval-seg-time");
+      if (segTimeNode) {
+        const tmpl = session.intervalTemplate.segments;
+        const idx = currentSegmentIndex();
+        if (idx < tmpl.length) {
+          const remaining = Math.max(0, tmpl[idx].targetDurationSec - elapsedInSegment(idx));
+          segTimeNode.textContent = Domain.fmtDur(remaining);
+        } else {
+          segTimeNode.textContent = "—";
+        }
+      }
+    }
+  }
+
+  /* ---------- Interval segment recording ----------
+     Segments are only written when they finish (by target time or an explicit
+     "done" tap), so the post-run summary reports completed work, never plan. */
+
+  function currentSegmentIndex() {
+    const segs = session.intervalSegments || [];
+    let i = 0;
+    while (i < segs.length && segs[i].done) i++;
+    return i;
+  }
+
+  function recordedSeconds() {
+    return (session.intervalSegments || []).reduce(function (a, s) { return a + (s.durationSec || 0); }, 0);
+  }
+
+  function elapsedInSegment(idx) {
+    return Math.max(0, Domain.elapsedSec(session) - recordedSeconds());
+  }
+
+  function recordIntervalSegment() {
+    if (!session || !isTimedSession(session) || !session.intervalTemplate) return false;
+    const tmpl = session.intervalTemplate.segments;
+    const idx = currentSegmentIndex();
+    if (idx >= tmpl.length) return false;
+    const segs = session.intervalSegments || (session.intervalSegments = []);
+    segs.push({
+      index: idx,
+      segmentType: tmpl[idx].segmentType,
+      targetDurationSec: tmpl[idx].targetDurationSec,
+      durationSec: elapsedInSegment(idx),
+      done: true
+    });
+    Store.saveActive(session);
+    return true;
+  }
+
+  function syncIntervalProgress() {
+    if (!session || !isTimedSession(session) || !session.intervalTemplate) return false;
+    const tmpl = session.intervalTemplate.segments;
+    let changed = false;
+    for (let guard = 0; guard < tmpl.length; guard++) {
+      const idx = currentSegmentIndex();
+      if (idx >= tmpl.length) break;
+      if (elapsedInSegment(idx) < tmpl[idx].targetDurationSec) break;
+      if (!recordIntervalSegment()) break;
+      changed = true;
+    }
+    return changed;
   }
 
   function stopTicker() {
@@ -647,10 +938,37 @@
       el("div", { class: "stat-pair" }, [
         el("div", {}, [el("div", { class: "metric-label", text: "Time" }), el("div", { class: "metric-small num", style: "font-weight:700", text: Domain.fmtDur(elapsed) })]),
         el("div", {}, [el("div", { class: "metric-label", text: "Distance" }), el("div", { class: "metric-small num", style: "font-weight:700", text: session.distanceM ? Domain.fmtDist(session.distanceM, (Store.get().settings || {}).unit) : "—" })]),
-        el("div", {}, [el("div", { class: "metric-label", text: "Pace" }), el("div", { class: "metric-small num", style: "font-weight:700", text: session.distanceM ? Domain.fmtPace(elapsed / (session.distanceM / 1000)) : "—" })])
+        el("div", {}, [el("div", { class: "metric-label", text: session.sport === "cycling" ? "Speed" : "Pace" }), el("div", { class: "metric-small num", style: "font-weight:700", text: paceValue(elapsed, session.distanceM, session.sport) })])
       ]),
-      el("p", { class: "micro muted-2 mt-3", text: session.distanceM ? "Distance source: manually entered (no GPS connected)." : "No distance recorded — the run will be saved as time only." })
+      el("p", { class: "micro muted-2 mt-3", text: session.distanceM ? "Distance source: manually entered (no GPS connected)." : "No distance recorded — it will be saved as time only." })
     ]));
+
+    if (session.intervalTemplate && session.intervalTemplate.segments.length) {
+      const summary = Domain.runningIntervalSummary(session);
+      const splitRows = (session.intervalSegments || []).map(function (seg, i) {
+        if (!seg.done) return null;
+        const label = (seg.segmentType === "work" ? "Work " : "Rest ") + (i + 1);
+        return el("tr", {}, [
+          el("td", {}, [el("span", { text: label })]),
+          el("td", {}, [el("span", { class: "num", text: Domain.fmtDur(seg.durationSec) })]),
+          el("td", {}, [el("span", { class: "num muted-2", text: Domain.fmtDur(summary.template && summary.template.segments[i] ? summary.template.segments[i].targetDurationSec : null) })])
+        ]);
+      }).filter(Boolean);
+      if (splitRows.length) {
+        body.push(el("div", { class: "card mb-4" }, [
+          el("div", { class: "eyebrow mb-2", text: "Interval segments you recorded" }),
+          el("p", { class: "small muted mb-3", text: "Time is what the clock recorded for each segment you completed. Target is the plan. Segments you skipped aren't listed." }),
+          el("table", { class: "set-table" }, [
+            el("thead", {}, [el("tr", {}, [
+              el("th", { text: "Segment", scope: "col" }),
+              el("th", { text: "Time", scope: "col" }),
+              el("th", { text: "Target", scope: "col" })
+            ])]),
+            el("tbody", {}, splitRows)
+          ])
+        ]));
+      }
+    }
 
     const notes = el("textarea", { class: "input", placeholder: "Route, conditions, how it felt…", "aria-label": "Run notes" });
     body.push(el("label", { class: "field" }, [el("span", { class: "field-label", text: "Notes (optional)" }), notes]));
@@ -658,9 +976,10 @@
     body.push(el("button", {
       class: "btn btn-primary btn-lg btn-block mt-6",
       onclick: function () {
+        const segs = (session.intervalSegments || []).slice();
         completeSession({
-          sport: "running",
-          title: session.title === "Free Run" ? (session.distanceM && session.distanceM >= 8000 ? "Long Run" : "Easy Run") : session.title,
+          sport: session.sport,
+          title: session.title,
           planId: session.planId || undefined,
           startedAt: session.startedAt,
           durationSec: elapsed,
@@ -668,14 +987,42 @@
           distanceSource: session.distanceM ? "manual" : null,
           notes: notes.value || "",
           exercises: [],
-          provenance: "manual"
+          provenance: "manual",
+          intervalTemplate: session.intervalTemplate || null,
+          intervalSegments: segs
         }, ctx, 1);
       }
-    }, [UI.icon("check"), "Save run"]));
+    }, [UI.icon("check"), "Save " + session.title.toLowerCase()]));
 
-    body.push(el("button", { class: "btn btn-ghost btn-block mt-3", text: "Keep running", onclick: UI.closeSheet }));
+    body.push(el("button", { class: "btn btn-ghost btn-block mt-3", text: "Keep going", onclick: UI.closeSheet }));
 
-    UI.sheet("Finish run", body);
+    UI.sheet("Finish " + session.title.toLowerCase(), body);
+  }
+
+  /* Share card for a just-finished session. The card renders only recorded
+     values, and keeps its provenance line (manual distance, manual entry). */
+  function openShareCard(s) {
+    const unit = (Store.get().settings || {}).unit || "metric";
+    const card = ShareCards.composeCard(s, { unit: unit });
+    const svg = ShareCards.toSVG(card, {});
+    const preview = el("div", { class: "mb-4" });
+    ShareCards.renderPreview(preview, svg);
+    const filename = "lmtlss-" + (s.sport || "activity") + "-" +
+      String(s.id || Date.now()).replace(/[^a-z0-9]/gi, "").slice(0, 12) + ".png";
+
+    UI.sheet("Share " + (s.title || "activity").toLowerCase(), [
+      preview,
+      el("p", { class: "micro muted-2 mb-4", text: card.provenance || "Rendered from what this session recorded — nothing added." }),
+      el("button", {
+        class: "btn btn-primary btn-block",
+        onclick: function () { ShareCards.shareCard(svg, (s.title || "Activity") + " · LMTLSS", filename); }
+      }, [UI.icon("share"), "Share"]),
+      el("button", {
+        class: "btn btn-secondary btn-block mt-3",
+        onclick: function () { ShareCards.exportPNG(svg, filename); }
+      }, [UI.icon("download"), "Save image"]),
+      el("button", { class: "btn btn-ghost btn-block mt-3", text: "Close", onclick: UI.closeSheet })
+    ]);
   }
 
   function completeSession(record, ctx, doneSets) {
@@ -726,11 +1073,56 @@
         el("div", {}, [el("div", { class: "metric-label", text: "Distance" }), el("div", { class: "metric-small num", style: "font-weight:700", text: s.distanceM ? Domain.fmtDist(s.distanceM, unit) : "—" })]),
         el("div", {}, [el("div", { class: "metric-label", text: "Pace" }), el("div", { class: "metric-small num", style: "font-weight:700", text: s.distanceM ? Domain.fmtPace(s.durationSec / (s.distanceM / 1000)) : "—" })])
       ]));
+      if (s.intervalTemplate && s.intervalTemplate.segments.length && s.intervalSegments && s.intervalSegments.length) {
+        const summary = Domain.runningIntervalSummary(s);
+        nodes.push(el("div", { class: "stat-pair mb-4" }, [
+          el("div", {}, [el("div", { class: "metric-label", text: "Work time" }), el("div", { class: "metric-small num", style: "font-weight:700", text: Domain.fmtDur(summary.totalWorkSec) })]),
+          el("div", {}, [el("div", { class: "metric-label", text: "Rest time" }), el("div", { class: "metric-small num", style: "font-weight:700", text: Domain.fmtDur(summary.totalRestSec) })]),
+          el("div", {}, [el("div", { class: "metric-label", text: "Segments done" }), el("div", { class: "metric-small num", style: "font-weight:700", text: String(summary.completedSegments) + "/" + s.intervalTemplate.segments.length })])
+        ]));
+        const workCount = s.intervalSegments.filter(function (g) { return g.segmentType === "work"; }).length;
+        nodes.push(el("div", { class: "panel-row panel-row-static" }, [
+          el("div", {}, [
+            el("div", { style: "font-weight:650", text: s.title || "Run" }),
+            el("div", { class: "micro muted-2 mt-2", text: Domain.relDay(s.startedAt) + " · " + s.intervalTemplate.name })
+          ]),
+          el("div", { class: "center" }, [
+            el("div", { class: "pr-row-value", text: workCount + "× work" }),
+            el("div", { class: "micro muted-2", text: summary.completedSegments + "/" + s.intervalTemplate.segments.length + " segments recorded" })
+          ])
+        ]));
+        nodes.push(el("p", { class: "small muted mb-4", text: "Interval splits come from the segments you completed during this run. Plan time is total target across all segments." }));
+      }
+    } else {
+      /* Every other sport renders exactly the metrics it recorded — nothing
+         is defaulted in to fill the row. */
+      const metrics = Domain.activityMetrics(s, unit);
+      if (metrics.length) {
+        nodes.push(el("div", { class: "stat-pair mb-4" }, metrics.slice(0, 3).map(function (m) {
+          return el("div", {}, [
+            el("div", { class: "metric-label", text: m.label }),
+            el("div", { class: "metric-small num", style: "font-weight:700", text: m.value })
+          ]);
+        })));
+      }
+      if (metrics.length > 3) {
+        nodes.push(el("div", { class: "stat-pair mb-4" }, metrics.slice(3).map(function (m) {
+          return el("div", {}, [
+            el("div", { class: "metric-label", text: m.label }),
+            el("div", { class: "metric-small num", style: "font-weight:700", text: m.value })
+          ]);
+        })));
+      }
+      nodes.push(el("p", { class: "micro muted-2 mb-4", text: "Entered manually — LMTLSS does not measure this sport." }));
     }
 
     if (s.notes) nodes.push(el("p", { class: "small muted mb-4", text: "“" + s.notes + "”" }));
 
     nodes.push(el("div", { class: "stack mt-4" }, [
+      el("button", {
+        class: "btn btn-secondary btn-block",
+        onclick: function () { openShareCard(s); }
+      }, [UI.icon("share"), "Share this activity"]),
       el("button", {
         class: "btn btn-secondary btn-block",
         onclick: function () { UI.closeSheet(); ctx.go("progress"); }

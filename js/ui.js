@@ -67,7 +67,8 @@
     download: '<path d="M12 4v11M7.5 11 12 15.5 16.5 11"/><path d="M5 20h14"/>',
     info: '<circle cx="12" cy="12" r="8.5"/><path d="M12 11v5"/><circle cx="12" cy="8" r="0.5" fill="currentColor"/>',
     warning: '<path d="M12 4 3.5 19h17L12 4Z"/><path d="M12 10v4"/><circle cx="12" cy="16.8" r="0.6" fill="currentColor"/>',
-    swap: '<path d="M6 8h12l-3-3M18 16H6l3 3"/>'
+    swap: '<path d="M6 8h12l-3-3M18 16H6l3 3"/>',
+    share: '<path d="M12 3.5v11"/><path d="m8 7 4-3.5L16 7"/><path d="M5.5 13.5V20h13v-6.5"/>'
   };
 
   function icon(name, cls) {

@@ -212,6 +212,69 @@
   eq("long gap while already paused: elapsed unchanged", pausedGap.session.elapsedBase, 60000);
   eq("no updatedAt: never frozen", Domain.resumeSession({ elapsedBase: 0, startMs: mNow, paused: false }, mNow).frozen, false);
 
+  /* ---------- interval run summaries ---------- */
+
+  // Only segments the runner actually recorded are counted. A partial run must
+  // never report the plan's work segments as completed work.
+  const partialRun = {
+    durationSec: 260,
+    distanceM: 1500,
+    intervalTemplate: {
+      name: "6 × 400m",
+      segments: [
+        { index: 0, segmentType: "work", targetDurationSec: 90 },
+        { index: 1, segmentType: "rest", targetDurationSec: 60 },
+        { index: 2, segmentType: "work", targetDurationSec: 90 },
+        { index: 3, segmentType: "rest", targetDurationSec: 60 },
+        { index: 4, segmentType: "work", targetDurationSec: 90 },
+        { index: 5, segmentType: "rest", targetDurationSec: 60 }
+      ]
+    },
+    intervalSegments: [
+      { index: 0, segmentType: "work", targetDurationSec: 90, durationSec: 88, done: true },
+      { index: 1, segmentType: "rest", targetDurationSec: 60, durationSec: 62, done: true },
+      { index: 2, segmentType: "work", targetDurationSec: 90, durationSec: 92, done: true }
+    ]
+  };
+  const partial = Domain.runningIntervalSummary(partialRun);
+  eq("interval summary counts recorded work segments", partial.workCount, 2);
+  eq("interval summary counts recorded rest segments", partial.restCount, 1);
+  eq("interval summary records completed segment total", partial.completedSegments, 3);
+  eq("interval summary sums recorded work time", partial.totalWorkSec, 180);
+  eq("interval summary sums recorded rest time", partial.totalRestSec, 62);
+  eq("interval summary keeps the plan length available for the denominator", partialRun.intervalTemplate.segments.length, 6);
+
+  const noSegments = Domain.runningIntervalSummary({ durationSec: 300, distanceM: 1000 });
+  eq("interval summary without segments reports zero work", noSegments.workCount, 0);
+  eq("interval summary without segments reports zero completed", noSegments.completedSegments, 0);
+  eq("interval summary without segments has no template", noSegments.template, null);
+
+  /* ---------- sport model ---------- */
+
+  eq("sports model covers the advertised activity list", Domain.SPORTS.length, 14);
+  ok("boxing records rounds", Domain.sportById("boxing").metrics.indexOf("rounds") >= 0);
+  ok("running does not record rounds", Domain.sportById("running").metrics.indexOf("rounds") < 0);
+  eq("unknown sport has no metric definitions", Domain.metricDefs("quidditch").length, 0);
+  eq("combat sports are grouped together", Domain.sportsInGroup("combat").length, 4);
+
+  // Only metrics the sport supports AND the activity actually has are rendered.
+  const runMetrics = Domain.activityMetrics({ sport: "running", durationSec: 1500, distanceM: 5000 }, "metric");
+  ok("run metrics include pace", runMetrics.some(function (m) { return m.key === "pace" && m.value === "5:00"; }));
+  ok("run metrics never include rounds", runMetrics.every(function (m) { return m.key !== "rounds"; }));
+  ok("absent metrics are not invented", Domain.activityMetrics({ sport: "running", durationSec: 600 }, "metric").every(function (m) { return m.key !== "distanceM" && m.key !== "pace"; }));
+  const boxingMetrics = Domain.activityMetrics({ sport: "boxing", durationSec: 1800, rounds: 6, roundDurationSec: 180 }, "metric");
+  ok("boxing reports rounds", boxingMetrics.some(function (m) { return m.key === "rounds" && m.value === "6"; }));
+  ok("boxing round length formats as a duration", boxingMetrics.some(function (m) { return m.key === "roundDurationSec" && m.value === "3:00"; }));
+  eq("golf strokes have no pace", Domain.formatMetric("pace", { sport: "golf", strokes: 84 }, "metric"), null);
+
+  ok("valid run passes validation", Domain.validateActivity({ sport: "running", durationSec: 1800, distanceM: 5000 }).ok);
+  ok("negative duration is rejected", !Domain.validateActivity({ sport: "running", durationSec: -5 }).ok);
+  ok("validation names the failing field", Domain.validateActivity({ sport: "running", durationSec: -5 }).errors[0].field === "durationSec");
+  ok("fractional reps are rejected", !Domain.validateActivity({ sport: "strength", reps: 4.5 }).ok);
+  ok("unknown sport is rejected", !Domain.validateActivity({ sport: "quidditch", durationSec: 60 }).ok);
+  ok("metrics the sport cannot record are ignored, not errors", Domain.validateActivity({ sport: "running", durationSec: 600, rounds: 3 }).ok);
+  ok("absent metrics stay absent instead of defaulting", Domain.validateActivity({ sport: "archery", arrows: null }).ok);
+
   /* ---------- pricing engine ---------- */
 
   // Money: integer minor units, explicit currency, no floats.
@@ -356,6 +419,103 @@
   ok("SVG renders route path when coords exist", routeSVG.indexOf("<path") >= 0);
   const hdist = ShareCards.haversineM(mkPt(19.4326, -99.1332), mkPt(19.4426, -99.1332));
   ok("haversine 0.01 lat ≈ 1112 m", hdist > 1100 && hdist < 1125, String(Math.round(hdist)));
+
+  /* ---------- recovery & fueling pillars ---------- */
+
+  /* Fixture dates are relative to the local calendar (never hardcoded), so the
+     suite does not rot and so "today" means the athlete's local day. */
+  const dayBack = function (days, hour, min) {
+    const d = new Date();
+    d.setDate(d.getDate() - days);
+    if (typeof hour === "number") d.setHours(hour, min || 0, 0, 0);
+    return d;
+  };
+  const dayISO = function (days) { return Store.todayISO(dayBack(days)); };
+
+  const recState = {
+    log: [
+      { sport: "strength", startedAt: dayBack(6, 18).toISOString() },
+      { sport: "strength", startedAt: dayBack(5, 18).toISOString() },
+      { sport: "strength", startedAt: dayBack(4, 18).toISOString() },
+      { sport: "strength", startedAt: dayBack(3, 18).toISOString() },
+      { sport: "strength", startedAt: dayBack(2, 18).toISOString() },
+      { sport: "strength", startedAt: dayBack(1, 18).toISOString() }
+    ],
+    readiness: [
+      { date: dayISO(4), energy: 2, soreness: 3 },
+      { date: dayISO(1), energy: 2, soreness: 4 }
+    ],
+    hydration: [
+      { date: dayISO(6), ml: 1000 },
+      { date: dayISO(5), ml: 1100 },
+      { date: dayISO(4), ml: 900 },
+      { date: dayISO(3), ml: 1200 },
+      { date: dayISO(2), ml: 1000 },
+      { date: dayISO(1), ml: 1100 },
+      { date: dayISO(0), ml: 1300 }
+    ],
+    meals: [
+      { id: "m1", date: dayISO(0), kind: "breakfast", calories: 400, proteinG: 20, time: dayBack(0, 8).toISOString() },
+      { id: "m2", date: dayISO(0), kind: "lunch", calories: 650, proteinG: 35, time: dayBack(0, 13).toISOString() }
+    ]
+  };
+
+  /* ---------- local-day boundary (regression: UTC "today" blanked evening entries) ---------- */
+
+  eq("todayISO uses the local calendar day, not the UTC slice",
+    Store.todayISO(new Date(2026, 9, 18, 23, 30)), "2026-10-18");
+  eq("todayISO keeps local midnight on its own day",
+    Store.todayISO(new Date(2026, 9, 18, 0, 5)), "2026-10-18");
+  const localFuel = Domain.fuelSummary({
+    hydration: [{ date: dayISO(0), ml: 500 }],
+    meals: [{ id: "late", kind: "dinner", calories: 300, proteinG: 12, time: dayBack(0, 23, 30).toISOString() }]
+  });
+  eq("fuelSummary finds today's hydration in local time", localFuel.hydrationMl, 500);
+  eq("an 11:30 pm local meal counts on the local day", localFuel.mealCalories, 300);
+  const lateSeries = Domain.recoverySeries({ log: [], readiness: [], hydration: [], meals: [
+    { id: "late2", kind: "dinner", calories: 1, proteinG: 1, time: dayBack(0, 23, 30).toISOString() }
+  ] }, 1);
+  // The grid runs Mon–Sun and includes days later this week, so locate today
+  // explicitly instead of assuming today is the last cell.
+  const lateSeriesToday = lateSeries.filter(function (d) { return d.date === Store.todayISO(); })[0];
+  eq("recoverySeries counts a late-evening meal on the local day",
+    lateSeriesToday && lateSeriesToday.meals, 1);
+
+  const recSeries = Domain.recoverySeries(recState, 2);
+  ok("recoverySeries produces a 7-day-per-week grid", recSeries.length === 14);
+  ok("recoverySeries labels weekdays", recSeries.every(function (d) { return d.weekday && d.weekday.length === 3; }));
+  ok("recoverySeries reads hydration", recSeries.some(function (d) { return d.hydration === 1000; }));
+  ok("recoverySeries counts meals per day", recSeries.some(function (d) { return d.meals === 2; }));
+  ok("recoverySeries marks rest vs training days", recSeries.every(function (d) { return typeof d.rest === "boolean"; }));
+
+  const rec = Domain.restDayRecommendation(recState);
+  eq("restDayRecommendation computes training days", rec.trainingDaysLast7, 6);
+  eq("restDayRecommendation computes low-energy days", rec.lowEnergyDaysLast7, 2);
+  ok("restDayRecommendation suggests a rest day when training 6d + 2 low-energy",
+    rec.suggestion.indexOf("rest day") >= 0);
+  ok("restDayRecommendation source names the data origin",
+    rec.source.indexOf("own data") >= 0);
+  ok("restDayRecommendation keeps a suggestion even when derived",
+    typeof rec.suggestion === "string" && rec.suggestion.length > 0);
+  ok("restDayRecommendation source is non-empty",
+    rec.source.length > 20);
+
+  const fuel = Domain.fuelSummary(recState);
+  eq("fuelSummary reads today's hydration", fuel.hydrationMl, 1300);
+  eq("fuelSummary reads hydrationLogged flag", fuel.hydrationLogged, true);
+  eq("fuelSummary sums meal calories", fuel.mealCalories, 1050);
+  eq("fuelSummary sums meal protein", fuel.mealProteinG, 55);
+  ok("fuelSummary labels meal estimates honestly",
+    fuel.mealEstimateLabel.indexOf("estimate") >= 0);
+
+  const noFuel = Domain.fuelSummary({ log: [], readiness: [], hydration: [], meals: [] });
+  eq("fuelSummary without data returns zeros", noFuel.hydrationMl, 0);
+  eq("fuelSummary without data marks not logged", noFuel.hydrationLogged, false);
+  eq("fuelSummary without meals labels empty state",
+    noFuel.mealEstimateLabel.indexOf("No meals logged") >= 0, true);
+
+  ok("mealEstimateLabel names user-entered estimate status",
+    Domain.mealEstimateLabel([{ id: "x", kind: "lunch", calories: 500 }]).indexOf("user-entered") >= 0);
 
   /* ---------- adaptive calendar (explainable weekly rebalancing) ---------- */
 

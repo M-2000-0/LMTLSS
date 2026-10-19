@@ -249,6 +249,54 @@
     return prs;
   }
 
+  function runningIntervalSummary(session) {
+    const segs = (session.intervalSegments || []);
+    const tmpl = session.intervalTemplate || null;
+    const elapsed = session.durationSec != null ? session.durationSec : Domain.elapsedSec(session);
+    const totalTime = elapsed || 0;
+    if (!segs.length) {
+      const pace = session.distanceM && totalTime > 5
+        ? totalTime / (session.distanceM / 1000)
+        : null;
+      return {
+        segments: segs,
+        totalTime: totalTime,
+        distKm: session.distanceM ? session.distanceM / 1000 : null,
+        avgPaceSecPerKm: pace,
+        totalWorkSec: 0,
+        totalRestSec: 0,
+        workCount: 0,
+        restCount: 0,
+        lastSegmentIndex: -1,
+        template: tmpl,
+        completedSegments: 0
+      };
+    }
+    let totalWorkSec = 0, totalRestSec = 0, workCount = 0, restCount = 0, lastIndex = -1;
+    segs.forEach(function (s) {
+      if (s.segmentType === "work") { totalWorkSec += s.durationSec || 0; workCount++; }
+      else if (s.segmentType === "rest") { totalRestSec += s.durationSec || 0; restCount++; }
+      if (s.done) lastIndex = Math.max(lastIndex, s.index);
+    });
+    const last = segs[segs.length - 1];
+    const template = tmpl && tmpl.segments.length ? tmpl : null;
+    return {
+      segments: segs,
+      totalTime: totalTime,
+      distKm: session.distanceM ? session.distanceM / 1000 : null,
+      avgPaceSecPerKm: session.distanceM && totalTime > 5
+        ? totalTime / (session.distanceM / 1000)
+        : null,
+      totalWorkSec: totalWorkSec,
+      totalRestSec: totalRestSec,
+      workCount: workCount,
+      restCount: restCount,
+      lastSegmentIndex: lastIndex,
+      template: template,
+      completedSegments: lastIndex >= 0 ? lastIndex + 1 : 0
+    };
+  }
+
   function weeklyVolumeSeries(state, weeks) {
     weeks = weeks || 8;
     const out = [];
@@ -765,6 +813,155 @@
     return base;
   }
 
+  /* ---------- Sport model ----------
+     Every sport records different things. A run has distance and pace; a
+     boxing session has rounds; a golf round has holes and strokes. Screens ask
+     this registry which metrics a sport supports instead of forcing every
+     activity through a running-shaped form.
+
+     Everything here is athlete-entered or clock-measured. No GPS, wearable or
+     heart-rate device is connected, so this model never claims a metric the
+     app cannot actually observe. */
+
+  // Metric vocabulary — one definition per value an activity can carry.
+  const METRICS = {
+    durationSec: { label: "Duration", kind: "duration" },
+    distanceM: { label: "Distance", kind: "distance" },
+    pace: { label: "Pace", kind: "pace" },
+    speed: { label: "Speed", kind: "speed" },
+    elevationM: { label: "Elevation", kind: "height" },
+    sets: { label: "Sets", kind: "count" },
+    reps: { label: "Reps", kind: "count" },
+    loadKg: { label: "Top load", kind: "weight" },
+    rounds: { label: "Rounds", kind: "count" },
+    roundDurationSec: { label: "Round length", kind: "duration" },
+    setsWon: { label: "Sets won", kind: "count" },
+    score: { label: "Score", kind: "text" },
+    holes: { label: "Holes played", kind: "count" },
+    strokes: { label: "Strokes", kind: "count" },
+    arrows: { label: "Arrows", kind: "count" },
+    strokeStyle: { label: "Stroke", kind: "text" },
+    opponent: { label: "Opponent", kind: "text" },
+    result: { label: "Result", kind: "text" },
+    effort: { label: "Perceived effort", kind: "effort" }
+  };
+
+  /* Supported sports. `metrics` is the full vocabulary the sport CAN record;
+     a given activity only renders the ones it actually has. */
+  const SPORTS = [
+    { id: "running", label: "Running", group: "endurance", metrics: ["durationSec", "distanceM", "pace", "elevationM", "effort"] },
+    { id: "cycling", label: "Cycling", group: "endurance", metrics: ["durationSec", "distanceM", "speed", "elevationM", "effort"] },
+    { id: "swimming", label: "Swimming", group: "endurance", metrics: ["durationSec", "distanceM", "pace", "strokeStyle", "effort"] },
+    { id: "strength", label: "Strength", group: "strength", metrics: ["durationSec", "sets", "reps", "loadKg", "effort"] },
+    { id: "boxing", label: "Boxing", group: "combat", metrics: ["durationSec", "rounds", "roundDurationSec", "result", "effort"] },
+    { id: "mma", label: "MMA", group: "combat", metrics: ["durationSec", "rounds", "roundDurationSec", "result", "effort"] },
+    { id: "taekwondo", label: "Taekwondo", group: "combat", metrics: ["durationSec", "rounds", "roundDurationSec", "score", "result"] },
+    { id: "martial-arts", label: "Martial arts", group: "combat", metrics: ["durationSec", "rounds", "score", "effort"] },
+    { id: "tennis", label: "Tennis", group: "racket", metrics: ["durationSec", "setsWon", "score", "opponent", "effort"] },
+    { id: "pickleball", label: "Pickleball", group: "racket", metrics: ["durationSec", "setsWon", "score", "opponent", "effort"] },
+    { id: "golf", label: "Golf", group: "precision", metrics: ["durationSec", "holes", "strokes", "score", "effort"] },
+    { id: "archery", label: "Archery", group: "precision", metrics: ["durationSec", "arrows", "score", "effort"] },
+    { id: "team-sports", label: "Team sports", group: "team", metrics: ["durationSec", "score", "result", "effort"] },
+    { id: "other", label: "Other", group: "other", metrics: ["durationSec", "score", "effort"] }
+  ];
+
+  function sportById(id) {
+    return SPORTS.find(function (s) { return s.id === id; }) || null;
+  }
+
+  function sportsInGroup(group) {
+    return SPORTS.filter(function (s) { return s.group === group; });
+  }
+
+  /* Metric definitions for a sport, in display order. Unknown sport = []. */
+  function metricDefs(sportId) {
+    const sport = sportById(sportId);
+    if (!sport) return [];
+    return sport.metrics.map(function (key) {
+      return { key: key, label: METRICS[key].label, kind: METRICS[key].kind };
+    });
+  }
+
+  /* Format one metric for display. Returns null when the activity has no value
+     for it — callers render nothing rather than a placeholder number. */
+  function formatMetric(key, activity, unit) {
+    const def = METRICS[key];
+    if (!def || !activity) return null;
+    if (key === "pace") {
+      if (!activity.distanceM || !activity.durationSec) return null;
+      return fmtPace(activity.durationSec / (activity.distanceM / 1000));
+    }
+    if (key === "speed") {
+      if (!activity.distanceM || !activity.durationSec) return null;
+      return ((activity.distanceM / 1000) / (activity.durationSec / 3600)).toFixed(1) + " km/h";
+    }
+    const v = activity[key];
+    if (v === null || v === undefined || v === "") return null;
+    switch (def.kind) {
+      case "duration": return typeof v === "number" ? fmtDur(v) : null;
+      case "distance": return typeof v === "number" ? fmtDist(v, unit) : null;
+      case "height": return typeof v === "number" ? Math.round(v) + " m" : null;
+      case "weight": return typeof v === "number" ? v + " kg" : null;
+      case "count": return typeof v === "number" ? String(v) : null;
+      case "effort": return typeof v === "number" ? v + "/10" : null;
+      default: return String(v);
+    }
+  }
+
+  /* The metrics an activity actually has, ready to render. Only metrics the
+     sport supports are considered, so a run never shows "rounds". */
+  function activityMetrics(activity, unit) {
+    if (!activity || !activity.sport) return [];
+    const out = [];
+    metricDefs(activity.sport).forEach(function (def) {
+      const value = formatMetric(def.key, activity, unit);
+      if (value !== null) out.push({ key: def.key, label: def.label, value: value });
+    });
+    return out;
+  }
+
+  /* Shape validation for an activity the app is about to store. Rejects
+     nonsense (negative durations, fractional reps, unknown sport) but never
+     invents missing values — absent metrics stay absent. */
+  function validateActivity(activity) {
+    const errors = [];
+    if (!activity || typeof activity !== "object") {
+      return { ok: false, errors: [{ field: null, message: "Activity must be an object." }] };
+    }
+    const sport = sportById(activity.sport);
+    if (!sport) return { ok: false, errors: [{ field: "sport", message: "Unknown sport." }] };
+    const allowed = sport.metrics;
+    const limits = {
+      durationSec: 86400, distanceM: 1000000, elevationM: 10000, sets: 100, reps: 1000,
+      loadKg: 1000, rounds: 100, roundDurationSec: 3600, setsWon: 20, holes: 36,
+      strokes: 300, arrows: 1000, effort: 10
+    };
+    const whole = ["sets", "reps", "rounds", "setsWon", "holes", "strokes", "arrows"];
+    Object.keys(activity).forEach(function (key) {
+      if (allowed.indexOf(key) < 0) return;       // not a metric this sport records
+      if (!METRICS[key]) return;
+      const v = activity[key];
+      if (v === null || v === undefined) return;   // absent is fine, never invented
+      if (limits[key] !== undefined) {
+        if (typeof v !== "number" || isNaN(v)) { errors.push({ field: key, message: METRICS[key].label + " must be a number." }); return; }
+        if (v < 0) { errors.push({ field: key, message: METRICS[key].label + " cannot be negative." }); return; }
+        if (v > limits[key]) { errors.push({ field: key, message: METRICS[key].label + " exceeds a plausible maximum." }); return; }
+        if (whole.indexOf(key) >= 0 && Math.round(v) !== v) {
+          errors.push({ field: key, message: METRICS[key].label + " must be a whole number." });
+        }
+        return;
+      }
+      if (typeof v !== "number" && typeof v !== "string") {
+        errors.push({ field: key, message: METRICS[key].label + " must be text." });
+        return;
+      }
+      if (typeof v === "string" && v.length > 200) {
+        errors.push({ field: key, message: METRICS[key].label + " is too long." });
+      }
+    });
+    return { ok: errors.length === 0, errors: errors };
+  }
+
   /* ---------- Session clock math (pure — used by screens-train) ---------- */
 
   const SESSION_IDLE_FREEZE_MS = 10 * 60 * 1000; // >10 min closed ⇒ freeze the clock
@@ -848,7 +1045,131 @@
     return fmtDate(iso);
   }
 
+  // ---------- Recovery & fueling pillars ----------
+
+  /* Calendar day an entry belongs to, in the athlete's local time.
+     A date-only string ("2026-10-18") is already a calendar day and passes
+     through; a full timestamp is converted, because slicing its UTC text put a
+     9 pm Mexico City meal on the next day — and disagreed with the local date
+     Store stamps onto meals and hydration. */
+  function logToDate(iso) {
+    if (!iso || typeof iso !== "string") return null;
+    const m = /^(\d{4}-\d{2}-\d{2})/.exec(iso);
+    if (!m) return null;
+    if (iso.length <= 10) return m[1];
+    const dt = new Date(iso);
+    if (isNaN(dt.getTime())) return m[1];
+    return dt.getFullYear() + "-" + pad2(dt.getMonth() + 1) + "-" + pad2(dt.getDate());
+  }
+
+  // Ordered daily aggregate for the last `weeks` weeks ending today.
+  // recoveryDay: {date, rest: bool, readiness: {energy, soreness} | null, hydration: ml | null, meals: count}
+  function recoverySeries(state, weeks) {
+    weeks = weeks || 4;
+    const out = [];
+    const today = new Date();
+    for (let w = weeks - 1; w >= 0; w--) {
+      const back = (today.getDay() + 6) % 7; // days since Monday (Sunday belongs to the week that started Monday)
+      const weekStart = new Date(today); weekStart.setDate(today.getDate() - back - w * 7);
+      for (let d = 0; d < 7; d++) {
+        const day = new Date(weekStart); day.setDate(weekStart.getDate() + d);
+        // Local calendar date — toISOString() would shift a day east of UTC.
+        const date = day.getFullYear() + "-" + pad2(day.getMonth() + 1) + "-" + pad2(day.getDate());
+        const r = (state.readiness || []).find(function (x) { return x.date === date; });
+        const h = (state.hydration || []).find(function (x) { return x.date === date; });
+        const meals = (state.meals || []).filter(function (m) { return logToDate(m.time) === date; }).length;
+        const hasStrengthOrMixed = state.log.some(function (s) {
+          const sDate = logToDate(s.startedAt);
+          if (sDate !== date) return false;
+          if (s.sport) return s.sport !== "" && s.sport !== null && s.sport !== undefined;
+          if (Array.isArray(s.exercises)) {
+            return s.exercises.some(function (e) { return e && e.sets && e.sets.some(function (set) { return Array.isArray(set) && set.length && (typeof set[0] === "number" || set[0] && set[0].reps != null || set[0] && set[0].load != null); }); });
+          }
+          return false;
+        });
+        out.push({
+          date: date,
+          weekday: DAY_ORDER[day.getDay() === 0 ? 6 : day.getDay() - 1],
+          rest: !hasStrengthOrMixed,
+          readiness: r ? { energy: r.energy, soreness: r.soreness } : null,
+          hydration: h ? h.ml : null,
+          meals: meals
+        });
+      }
+    }
+    return out;
+  }
+
+  // Plain recommendation, not a medical judgment.
+  function restDayRecommendation(state) {
+    /* "Last 7 days" = the 7 elapsed local days ending today. The old slice
+       took the last seven cells of a Mon–Sun grid, so on Mon–Sat it counted
+       future days and reported too few training days. Two weeks guarantee
+       seven elapsed days across the week boundary. */
+    const series = recoverySeries(state, 2);
+    const today = Store.todayISO();
+    const last7 = series.filter(function (d) { return d.date <= today; }).slice(-7);
+    const trainingDays = last7.filter(function (d) { return !d.rest; }).length;
+    const lowEnergyDays = last7.filter(function (d) { return d.readiness && d.readiness.energy <= 2; }).length;
+    const kit = {
+      trainingDaysLast7: trainingDays,
+      lowEnergyDaysLast7: lowEnergyDays,
+      suggestion: null,
+      why: "",
+      confidence: 2,
+      source: "Derived from your logged sessions and readiness entries this week — your own data, not a measured recovery metric."
+    };
+    if (trainingDays >= 6 && lowEnergyDays >= 2) {
+      kit.suggestion = "Consider a scheduled rest day this week if you haven't taken one already.";
+      kit.why = "You trained on " + trainingDays + " of the last 7 days and rated energy low on " + lowEnergyDays + " of them. A planned rest day is part of the program, not a lapse.";
+    } else if (trainingDays >= 5) {
+      kit.suggestion = "If today is your sixth session day this week, a rest or mobility day is reasonable.";
+      kit.why = "At " + trainingDays + " training days in 7, you're at typical weekly capacity for most intermediates. Recovery is when the work sticks.";
+    } else {
+      kit.suggestion = "Your week has room — keep today's plan unless your readiness says otherwise.";
+      kit.why = "You trained on " + trainingDays + " of the last 7 days, which leaves normal recovery headroom for this week.";
+    }
+    // Confirm the recommendation is derived from actual data, not a guess.
+    if (!kit.why || !kit.source) {
+      kit.suggestion = "Not enough data to give a rest-day suggestion yet — log sessions and readiness.";
+      kit.why = "LMTLSS only suggests rest days from your own logged data.";
+      kit.source = "Derived from your logged sessions and readiness entries this week — your own data, not a measured recovery metric.";
+    }
+    return kit;
+  }
+
+  function mealEstimateLabel(meals) {
+    // Honest label attached wherever meal totals are shown.
+    if (!meals || !meals.length) return "No meals logged \u2014 shown values are estimates only.";
+    return "Meal entries are user-entered estimates (not tracked intake). Totals are directional, not exact.";
+  }
+
+  function fuelSummary(state) {
+    const today = Store.todayISO();
+    const hRow = (state.hydration || []).find(function (h) { return h.date === today; });
+    const meals = (state.meals || []).filter(function (m) { return logToDate(m.time) === today; });
+    const mealCals = meals.reduce(function (a, m) { return a + (typeof m.calories === "number" ? m.calories : 0); }, 0);
+    const mealProtein = meals.reduce(function (a, m) { return a + (typeof m.proteinG === "number" ? m.proteinG : 0); }, 0);
+    return {
+      date: today,
+      hydrationMl: hRow ? hRow.ml : 0,
+      hydrationLogged: !!hRow,
+      mealsLogged: meals.length,
+      mealCalories: mealCals,
+      mealProteinG: mealProtein,
+      mealEstimateLabel: mealEstimateLabel(meals)
+    };
+  }
+
   window.Domain = {
+    METRICS: METRICS,
+    SPORTS: SPORTS,
+    sportById: sportById,
+    sportsInGroup: sportsInGroup,
+    metricDefs: metricDefs,
+    formatMetric: formatMetric,
+    activityMetrics: activityMetrics,
+    validateActivity: validateActivity,
     EXERCISES: EXERCISES,
     GOAL_LABELS: GOAL_LABELS,
     EQUIP_LABELS: EQUIP_LABELS,
@@ -877,6 +1198,12 @@
     fmtDist: fmtDist,
     fmtDate: fmtDate,
     fmtDateFull: fmtDateFull,
-    relDay: relDay
+    relDay: relDay,
+    DAY_ORDER: DAY_ORDER,
+    recoverySeries: recoverySeries,
+    restDayRecommendation: restDayRecommendation,
+    mealEstimateLabel: mealEstimateLabel,
+    fuelSummary: fuelSummary,
+    runningIntervalSummary: runningIntervalSummary
   };
 })();

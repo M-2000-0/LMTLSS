@@ -8,6 +8,8 @@
   const TABS = [
     { id: "home", label: "Home", icon: "home" },
     { id: "train", label: "Train", icon: "train" },
+    { id: "recover", label: "Recover", icon: "heart" },
+    { id: "fuel", label: "Fuel", icon: "drop" },
     { id: "progress", label: "Progress", icon: "progress" },
     { id: "coach", label: "Coach", icon: "coach" },
     { id: "profile", label: "Profile", icon: "profile" }
@@ -16,6 +18,8 @@
   const SCREENS = {
     home: function () { return window.HomeScreen; },
     train: function () { return window.TrainScreen; },
+    recover: function () { return window.RecoverScreen; },
+    fuel: function () { return window.FuelScreen; },
     progress: function () { return window.ProgressScreen; },
     coach: function () { return window.CoachScreen; },
     profile: function () { return window.ProfileScreen; }
@@ -82,6 +86,11 @@
     go(state.activeSession ? "train" : "home");
   }
 
+  function bootFromRestore(target) {
+    renderNav();
+    go(target || (state.activeSession ? "train" : "home"));
+  }
+
   function showWelcome() {
     UI.clear(navEl);
     navEl.style.display = "none";
@@ -92,6 +101,13 @@
         el("span", { class: "wordmark" }, ["LMTLSS", el("span", { class: "dot", text: "." })])
       ]),
       el("div", { class: "onboarding-body", style: "display:flex;flex-direction:column;justify-content:center" }, [
+        el("img", {
+          src: "logo/image-removebg-preview.png",
+          alt: "LMTLSS emblem",
+          width: "96",
+          height: "96",
+          style: "width:96px;height:96px;object-fit:contain;align-self:flex-start;margin-bottom:4px"
+        }),
         el("p", { class: "eyebrow accent", text: "Your performance. Without limits." }),
         el("h1", { style: "font-size:var(--fs-hero);font-weight:800;letter-spacing:-0.03em;line-height:1.02;margin-top:12px" }, [
           "The operating system ",

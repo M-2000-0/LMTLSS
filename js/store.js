@@ -15,9 +15,16 @@
     return prefix + "_" + Date.now().toString(36) + Math.random().toString(36).slice(2, 7);
   }
 
+  function pad2(n) { return (n < 10 ? "0" : "") + n; }
+
+  /* The athlete's "today" is a LOCAL calendar day, never the UTC text slice.
+     toISOString().slice(0,10) rolls over at 18:00 in UTC-6, so a 7 pm hydration
+     entry was filed under tomorrow and the Fuel/Recover screens reported 0 for
+     today. Domain.weekStartISO() and Domain.recoverySeries() already compute
+     local dates; todayISO() must agree with them. */
   function todayISO(d) {
     const dt = d ? new Date(d) : new Date();
-    return dt.toISOString().slice(0, 10);
+    return dt.getFullYear() + "-" + pad2(dt.getMonth() + 1) + "-" + pad2(dt.getDate());
   }
 
   function emptyState() {
@@ -29,6 +36,8 @@
       log: [], // completed sessions
       readiness: [], // {date, energy:1-5, soreness:1-5, note}
       hydration: [], // {date, ml}
+      meals: [], // {id, date, time, kind, calories, proteinG, carbsG, fatG, note}
+      recoveryActions: [], // {id, date, kind, note, time}
       activeSession: null, // in-flight workout
       coachThread: [], // {role:'user'|'coach', text, ts}
       settings: { unit: "metric", restSeconds: 90, weekStart: "mon" },
@@ -201,6 +210,39 @@
     });
   }
 
+  function setHydration(ml) {
+    set(function (s) {
+      const date = todayISO();
+      const idx = s.hydration.findIndex(function (h) { return h.date === date; });
+      if (idx >= 0) s.hydration[idx].ml = ml; else s.hydration.push({ date: date, ml: ml });
+    });
+  }
+
+  function logMeal(entry) {
+    set(function (s) {
+      if (!s.meals) s.meals = [];
+      const date = todayISO();
+      const dayStart = new Date(date + "T00:00:00").getTime();
+      const ts = entry.time ? new Date(entry.time).getTime() : Date.now();
+      if (ts < dayStart - 86400000 || ts > dayStart + 86400000) {
+        if (typeof UI !== "undefined" && UI && UI.toast) UI.toast("Meal logged for " + Store.todayISO(new Date(ts)) + ", not today.", { duration: 3000 });
+      }
+      s.meals.push(Object.assign({ id: uid("meal"), date: todayISO(new Date(ts)) }, entry));
+      s.meals.sort(function (a, b) { return a.time < b.time ? -1 : 1; });
+    });
+  }
+
+  function deleteMeal(id) {
+    set(function (s) { s.meals = (s.meals || []).filter(function (m) { return m.id !== id; }); });
+  }
+
+  function logRecoveryAction(entry) {
+    set(function (s) {
+      if (!s.recoveryActions) s.recoveryActions = [];
+      s.recoveryActions.push(Object.assign({ id: uid("rec"), date: todayISO(), kind: entry.kind || "other", note: entry.note || "", time: entry.time || new Date().toISOString() }, entry));
+    });
+  }
+
   /* ---------- Coach thread ---------- */
 
   function pushCoach(msg) {
@@ -349,6 +391,10 @@
     clearActive: clearActive,
     logReadiness: logReadiness,
     addHydration: addHydration,
+    setHydration: setHydration,
+    logMeal: logMeal,
+    deleteMeal: deleteMeal,
+    logRecoveryAction: logRecoveryAction,
     pushCoach: pushCoach,
     clearCoach: clearCoach,
     updateSettings: updateSettings,

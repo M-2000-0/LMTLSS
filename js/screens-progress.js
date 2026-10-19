@@ -146,12 +146,20 @@
   }
 
   function sessionSummary(s, unit) {
+    if (s.sport === "strength") {
+      const sets = (s.exercises || []).reduce(function (a, e) { return a + (e.sets || []).filter(function (st) { return st.done !== false; }).length; }, 0);
+      return UI.plural((s.exercises || []).length, "exercise") + " · " + UI.plural(sets, "set") + " · " + Domain.fmtDurHuman(s.durationSec || 0);
+    }
     if (s.sport === "running") {
       const pace = s.distanceM ? Domain.fmtPace(s.durationSec / (s.distanceM / 1000)) + "/km · " : "";
       return pace + Domain.fmtDur(s.durationSec) + (s.distanceSource === "manual-estimate" ? " · est. distance" : "");
     }
-    const sets = (s.exercises || []).reduce(function (a, e) { return a + (e.sets || []).filter(function (st) { return st.done !== false; }).length; }, 0);
-    return UI.plural((s.exercises || []).length, "exercise") + " · " + UI.plural(sets, "set") + " · " + Domain.fmtDurHuman(s.durationSec || 0);
+    // Every other sport renders the metrics it actually recorded.
+    const metrics = Domain.activityMetrics(s, unit).filter(function (m) { return m.key !== "durationSec"; });
+    const head = Domain.sportById(s.sport) ? Domain.sportById(s.sport).label : (s.sport || "Activity");
+    if (!metrics.length) return head + " · " + Domain.fmtDurHuman(s.durationSec || 0);
+    return metrics.slice(0, 2).map(function (m) { return m.label + " " + m.value; }).join(" · ") +
+      " · " + Domain.fmtDurHuman(s.durationSec || 0);
   }
 
   function insightCard(i) {
@@ -183,6 +191,18 @@
         el("div", {}, [el("div", { class: "metric-label", text: "Pace" }), el("div", { class: "metric-small num", style: "font-weight:700", text: s.distanceM ? Domain.fmtPace(s.durationSec / (s.distanceM / 1000)) : "—" })])
       ]));
       nodes.push(el("p", { class: "micro muted-2 mt-3", text: "Provenance: " + (s.distanceSource === "manual-estimate" ? "distance estimated from time × self-reported pace, no GPS" : "manually entered") }));
+    } else {
+      // Sports outside strength/running: show the metrics this entry recorded.
+      const metrics = Domain.activityMetrics(s, unit);
+      if (metrics.length) {
+        nodes.push(el("div", { class: "stat-pair" }, metrics.map(function (m) {
+          return el("div", {}, [
+            el("div", { class: "metric-label", text: m.label }),
+            el("div", { class: "metric-small num", style: "font-weight:700", text: m.value })
+          ]);
+        })));
+        nodes.push(el("p", { class: "micro muted-2 mt-3", text: "Provenance: entered manually — this sport is not measured automatically." }));
+      }
     }
     if (s.notes) nodes.push(el("p", { class: "small muted mt-4", text: "“" + s.notes + "”" }));
     nodes.push(el("div", { class: "mt-6" }, [
