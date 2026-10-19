@@ -20,6 +20,13 @@ import type {
   PlannedExercise,
   PlannedSession,
   Profile,
+  FuelSummary,
+  MealEntry,
+  RecoveryDay,
+  RestDayKit,
+  RunningIntervalSegment,
+  RunningIntervalSummary,
+  RunningIntervalTemplate,
   RunningPR,
   SessionResult,
   SessionLog,
@@ -125,7 +132,7 @@ function planFor(profile: Profile): Plan {
   let sIdx = 0;
   const runOrder = [easyRun, easyRun, longRun];
   let rIdx = 0;
-  // Pattern preference: S, R, S, R, S, S (for up to 6 days)
+  // Pattern preference: S, R, S, R, S, R (for up to 6 days)
   const preference = ["S", "R", "S", "R", "S", "R"];
   for (let i = 0; i < days; i++) {
     const want = preference[i];
@@ -277,6 +284,67 @@ function runningPRs(state: AppState): Record<string, RunningPR> {
     }
   });
   return prs;
+}
+
+/** What runningIntervalSummary needs: a finished log entry, or a live session. */
+export interface IntervalSessionInput {
+  durationSec?: number | null;
+  distanceM?: number | null;
+  intervalSegments?: RunningIntervalSegment[] | null;
+  intervalTemplate?: RunningIntervalTemplate | null;
+  elapsedBase?: number;
+  startMs?: number;
+  paused?: boolean;
+}
+
+function runningIntervalSummary(session: IntervalSessionInput): RunningIntervalSummary {
+  const segs: RunningIntervalSegment[] = (session.intervalSegments || []);
+  const tmpl: RunningIntervalTemplate | null = session.intervalTemplate || null;
+  const liveElapsed = typeof session.startMs === "number"
+    ? elapsedSec({ elapsedBase: session.elapsedBase || 0, startMs: session.startMs, paused: !!session.paused })
+    : 0;
+  const elapsed = session.durationSec != null ? session.durationSec : liveElapsed;
+  const totalTime = elapsed || 0;
+  if (!segs.length) {
+    const pace = session.distanceM && totalTime > 5
+      ? totalTime / (session.distanceM / 1000)
+      : null;
+    return {
+      segments: segs,
+      totalTime: totalTime,
+      distKm: session.distanceM ? session.distanceM / 1000 : null,
+      avgPaceSecPerKm: pace,
+      totalWorkSec: 0,
+      totalRestSec: 0,
+      workCount: 0,
+      restCount: 0,
+      lastSegmentIndex: -1,
+      template: tmpl,
+      completedSegments: 0
+    };
+  }
+  let totalWorkSec = 0, totalRestSec = 0, workCount = 0, restCount = 0, lastIndex = -1;
+  segs.forEach(function (s) {
+    if (s.segmentType === "work") { totalWorkSec += s.durationSec || 0; workCount++; }
+    else if (s.segmentType === "rest") { totalRestSec += s.durationSec || 0; restCount++; }
+    if (s.done) lastIndex = Math.max(lastIndex, s.index);
+  });
+  const template = tmpl && tmpl.segments.length ? tmpl : null;
+  return {
+    segments: segs,
+    totalTime: totalTime,
+    distKm: session.distanceM ? session.distanceM / 1000 : null,
+    avgPaceSecPerKm: session.distanceM && totalTime > 5
+      ? totalTime / (session.distanceM / 1000)
+      : null,
+    totalWorkSec: totalWorkSec,
+    totalRestSec: totalRestSec,
+    workCount: workCount,
+    restCount: restCount,
+    lastSegmentIndex: lastIndex,
+    template: template,
+    completedSegments: lastIndex >= 0 ? lastIndex + 1 : 0
+  };
 }
 
 function weeklyVolumeSeries(state: AppState, weeks?: number): WeekPoint[] {
@@ -811,6 +879,302 @@ function rebalanceWeek(state: AppState, nowMs?: number): RebalanceProposal {
   return base;
 }
 
+/* ---------- Sport model ----------
+   Every sport records different things. A run has distance and pace; a boxing
+   session has rounds; a golf round has holes and strokes. Screens ask this
+   registry which metrics a sport supports instead of forcing every activity
+   through a running-shaped form.
+
+   Everything here is athlete-entered or clock-measured. No GPS, wearable or
+   heart-rate device is connected, so this model never claims a metric the app
+   cannot actually observe. Mirrors js/domain.js exactly. */
+
+/** One value an activity can carry. */
+export interface MetricDef {
+  label: string;
+  kind: "duration" | "distance" | "pace" | "speed" | "height" | "count" | "weight" | "effort" | "text";
+}
+
+/** A sport and the full metric vocabulary it can record. */
+export interface SportDef {
+  id: string;
+  label: string;
+  group: string;
+  metrics: string[];
+}
+
+// Metric vocabulary — one definition per value an activity can carry.
+const METRICS: Record<string, MetricDef> = {
+  durationSec: { label: "Duration", kind: "duration" },
+  distanceM: { label: "Distance", kind: "distance" },
+  pace: { label: "Pace", kind: "pace" },
+  speed: { label: "Speed", kind: "speed" },
+  elevationM: { label: "Elevation", kind: "height" },
+  sets: { label: "Sets", kind: "count" },
+  reps: { label: "Reps", kind: "count" },
+  loadKg: { label: "Top load", kind: "weight" },
+  rounds: { label: "Rounds", kind: "count" },
+  roundDurationSec: { label: "Round length", kind: "duration" },
+  setsWon: { label: "Sets won", kind: "count" },
+  score: { label: "Score", kind: "text" },
+  holes: { label: "Holes played", kind: "count" },
+  strokes: { label: "Strokes", kind: "count" },
+  arrows: { label: "Arrows", kind: "count" },
+  strokeStyle: { label: "Stroke", kind: "text" },
+  opponent: { label: "Opponent", kind: "text" },
+  result: { label: "Result", kind: "text" },
+  effort: { label: "Perceived effort", kind: "effort" }
+};
+
+const SPORTS: SportDef[] = [
+  { id: "running", label: "Running", group: "endurance", metrics: ["durationSec", "distanceM", "pace", "elevationM", "effort"] },
+  { id: "cycling", label: "Cycling", group: "endurance", metrics: ["durationSec", "distanceM", "speed", "elevationM", "effort"] },
+  { id: "swimming", label: "Swimming", group: "endurance", metrics: ["durationSec", "distanceM", "pace", "strokeStyle", "effort"] },
+  { id: "strength", label: "Strength", group: "strength", metrics: ["durationSec", "sets", "reps", "loadKg", "effort"] },
+  { id: "boxing", label: "Boxing", group: "combat", metrics: ["durationSec", "rounds", "roundDurationSec", "result", "effort"] },
+  { id: "mma", label: "MMA", group: "combat", metrics: ["durationSec", "rounds", "roundDurationSec", "result", "effort"] },
+  { id: "taekwondo", label: "Taekwondo", group: "combat", metrics: ["durationSec", "rounds", "roundDurationSec", "score", "result"] },
+  { id: "martial-arts", label: "Martial arts", group: "combat", metrics: ["durationSec", "rounds", "score", "effort"] },
+  { id: "tennis", label: "Tennis", group: "racket", metrics: ["durationSec", "setsWon", "score", "opponent", "effort"] },
+  { id: "pickleball", label: "Pickleball", group: "racket", metrics: ["durationSec", "setsWon", "score", "opponent", "effort"] },
+  { id: "golf", label: "Golf", group: "precision", metrics: ["durationSec", "holes", "strokes", "score", "effort"] },
+  { id: "archery", label: "Archery", group: "precision", metrics: ["durationSec", "arrows", "score", "effort"] },
+  { id: "team-sports", label: "Team sports", group: "team", metrics: ["durationSec", "score", "result", "effort"] },
+  { id: "other", label: "Other", group: "other", metrics: ["durationSec", "score", "effort"] }
+];
+
+function sportById(id: string): SportDef | null {
+  return SPORTS.find(function (s) { return s.id === id; }) || null;
+}
+
+function sportsInGroup(group: string): SportDef[] {
+  return SPORTS.filter(function (s) { return s.group === group; });
+}
+
+/** Metric definitions for a sport, in display order. Unknown sport = []. */
+function metricDefs(sportId: string): { key: string; label: string; kind: MetricDef["kind"] }[] {
+  const sport = sportById(sportId);
+  if (!sport) return [];
+  return sport.metrics.map(function (key) {
+    return { key: key, label: METRICS[key].label, kind: METRICS[key].kind };
+  });
+}
+
+/** A partial activity as the model sees it — any metric the sport allows. */
+export interface ActivityInput {
+  sport?: string | null;
+  durationSec?: number | null;
+  distanceM?: number | null;
+  elevationM?: number | null;
+  sets?: number | null;
+  reps?: number | null;
+  loadKg?: number | null;
+  rounds?: number | null;
+  roundDurationSec?: number | null;
+  setsWon?: number | null;
+  score?: number | string | null;
+  holes?: number | null;
+  strokes?: number | null;
+  arrows?: number | null;
+  strokeStyle?: string | null;
+  opponent?: string | null;
+  result?: string | null;
+  effort?: number | null;
+  [key: string]: unknown;
+}
+
+/** Format one metric for display, or null when the activity lacks a value. */
+function formatMetric(key: string, activity: ActivityInput | null | undefined, unit?: string): string | null {
+  const def = METRICS[key];
+  if (!def || !activity) return null;
+  if (key === "pace") {
+    if (!activity.distanceM || !activity.durationSec) return null;
+    return fmtPace(activity.durationSec / (activity.distanceM / 1000));
+  }
+  if (key === "speed") {
+    if (!activity.distanceM || !activity.durationSec) return null;
+    return ((activity.distanceM / 1000) / (activity.durationSec / 3600)).toFixed(1) + " km/h";
+  }
+  const v = activity[key];
+  if (v === null || v === undefined || v === "") return null;
+  switch (def.kind) {
+    case "duration": return typeof v === "number" ? fmtDur(v) : null;
+    case "distance": return typeof v === "number" ? fmtDist(v, unit) : null;
+    case "height": return typeof v === "number" ? Math.round(v) + " m" : null;
+    case "weight": return typeof v === "number" ? v + " kg" : null;
+    case "count": return typeof v === "number" ? String(v) : null;
+    case "effort": return typeof v === "number" ? v + "/10" : null;
+    default: return String(v);
+  }
+}
+
+/** The metrics an activity actually has, ready to render. */
+function activityMetrics(activity: ActivityInput | null | undefined, unit?: string): { key: string; label: string; value: string }[] {
+  if (!activity || !activity.sport) return [];
+  const out: { key: string; label: string; value: string }[] = [];
+  metricDefs(activity.sport).forEach(function (def) {
+    const value = formatMetric(def.key, activity, unit);
+    if (value !== null) out.push({ key: def.key, label: def.label, value: value });
+  });
+  return out;
+}
+
+/** Validation issue for one field (field is null for a whole-object problem). */
+export interface ActivityError {
+  field: string | null;
+  message: string;
+}
+
+/**
+ * Shape validation for an activity about to be stored. Rejects nonsense but
+ * never invents missing values — absent metrics stay absent.
+ */
+function validateActivity(activity: ActivityInput | null | undefined): { ok: boolean; errors: ActivityError[] } {
+  const errors: ActivityError[] = [];
+  if (!activity || typeof activity !== "object") {
+    return { ok: false, errors: [{ field: null, message: "Activity must be an object." }] };
+  }
+  const sport = sportById(String(activity.sport || ""));
+  if (!sport) return { ok: false, errors: [{ field: "sport", message: "Unknown sport." }] };
+  const allowed = sport.metrics;
+  const limits: Record<string, number> = {
+    durationSec: 86400, distanceM: 1000000, elevationM: 10000, sets: 100, reps: 1000,
+    loadKg: 1000, rounds: 100, roundDurationSec: 3600, setsWon: 20, holes: 36,
+    strokes: 300, arrows: 1000, effort: 10
+  };
+  const whole = ["sets", "reps", "rounds", "setsWon", "holes", "strokes", "arrows"];
+  Object.keys(activity).forEach(function (key) {
+    if (allowed.indexOf(key) < 0) return;
+    const def = METRICS[key];
+    if (!def) return;
+    const v = activity[key];
+    if (v === null || v === undefined) return;
+    if (limits[key] !== undefined) {
+      if (typeof v !== "number" || isNaN(v)) { errors.push({ field: key, message: def.label + " must be a number." }); return; }
+      if (v < 0) { errors.push({ field: key, message: def.label + " cannot be negative." }); return; }
+      if (v > limits[key]) { errors.push({ field: key, message: def.label + " exceeds a plausible maximum." }); return; }
+      if (whole.indexOf(key) >= 0 && Math.round(v) !== v) {
+        errors.push({ field: key, message: def.label + " must be a whole number." });
+      }
+      return;
+    }
+    if (typeof v !== "number" && typeof v !== "string") {
+      errors.push({ field: key, message: def.label + " must be text." });
+      return;
+    }
+    if (typeof v === "string" && v.length > 200) {
+      errors.push({ field: key, message: def.label + " is too long." });
+    }
+  });
+  return { ok: errors.length === 0, errors: errors };
+}
+
+/* ---------- Fuel & recovery — daily aggregates from what you logged ----------
+   Mirrors js/domain.js exactly. Every value is derived from user entries; the
+   meal figures stay explicitly labeled as user-entered estimates. */
+
+/**
+ * Calendar day an entry belongs to, in the athlete's local time (mirrors
+ * js/domain.js). Date-only strings pass through; full timestamps are converted
+ * so an evening entry is not pushed onto the next day by its UTC text.
+ */
+function logToDate(iso?: string | null): string | null {
+  if (!iso || typeof iso !== "string") return null;
+  const m = /^(\d{4}-\d{2}-\d{2})/.exec(iso);
+  if (!m) return null;
+  if (iso.length <= 10) return m[1];
+  const dt = new Date(iso);
+  if (isNaN(dt.getTime())) return m[1];
+  return dt.getFullYear() + "-" + pad2(dt.getMonth() + 1) + "-" + pad2(dt.getDate());
+}
+
+/** Ordered daily aggregate for the last `weeks` weeks ending today. */
+function recoverySeries(state: AppState, weeks?: number): RecoveryDay[] {
+  const count = weeks || 4;
+  const out: RecoveryDay[] = [];
+  const today = new Date();
+  const meals = state.meals || [];
+  for (let w = count - 1; w >= 0; w--) {
+    const back = (today.getDay() + 6) % 7; // days since Monday (Sunday belongs to the week that started Monday)
+    const weekStart = new Date(today);
+    weekStart.setDate(today.getDate() - back - w * 7);
+    for (let d = 0; d < 7; d++) {
+      const day = new Date(weekStart);
+      day.setDate(weekStart.getDate() + d);
+      // Local calendar date — toISOString() would shift a day east of UTC.
+      const date = day.getFullYear() + "-" + pad2(day.getMonth() + 1) + "-" + pad2(day.getDate());
+      const r = (state.readiness || []).find(function (x) { return x.date === date; });
+      const h = (state.hydration || []).find(function (x) { return x.date === date; });
+      const mealCount = meals.filter(function (m) { return logToDate(m.time) === date; }).length;
+      const trained = (state.log || []).some(function (s) { return logToDate(s.startedAt) === date; });
+      out.push({
+        date: date,
+        weekday: DAY_ORDER[day.getDay() === 0 ? 6 : day.getDay() - 1],
+        rest: !trained,
+        readiness: r ? { energy: r.energy, soreness: r.soreness } : null,
+        hydration: h ? h.ml : null,
+        meals: mealCount
+      });
+    }
+  }
+  return out;
+}
+
+/** Plain recommendation, not a medical judgment. */
+function restDayRecommendation(state: AppState): RestDayKit {
+  /* "Last 7 days" = the 7 elapsed local days ending today. The old slice took
+     the last seven cells of a Mon–Sun grid, so on Mon–Sat it counted future
+     days and reported too few training days. Two weeks guarantee seven
+     elapsed days across the week boundary. Mirrors js/domain.js. */
+  const series = recoverySeries(state, 2);
+  const today = getPlatformBindings().todayISO();
+  const last7 = series.filter(function (d) { return d.date <= today; }).slice(-7);
+  const trainingDays = last7.filter(function (d) { return !d.rest; }).length;
+  const lowEnergyDays = last7.filter(function (d) { return d.readiness && (d.readiness.energy || 0) <= 2; }).length;
+  const kit: RestDayKit = {
+    trainingDaysLast7: trainingDays,
+    lowEnergyDaysLast7: lowEnergyDays,
+    suggestion: null,
+    why: "",
+    confidence: 2,
+    source: "Derived from your logged sessions and readiness entries this week — your own data, not a measured recovery metric."
+  };
+  if (trainingDays >= 6 && lowEnergyDays >= 2) {
+    kit.suggestion = "Consider a scheduled rest day this week if you haven't taken one already.";
+    kit.why = "You trained on " + trainingDays + " of the last 7 days and rated energy low on " + lowEnergyDays + " of them. A planned rest day is part of the program, not a lapse.";
+  } else if (trainingDays >= 5) {
+    kit.suggestion = "If today is your sixth session day this week, a rest or mobility day is reasonable.";
+    kit.why = "At " + trainingDays + " training days in 7, you're at typical weekly capacity for most intermediates. Recovery is when the work sticks.";
+  } else {
+    kit.suggestion = "Your week has room — keep today's plan unless your readiness says otherwise.";
+    kit.why = "You trained on " + trainingDays + " of the last 7 days, which leaves normal recovery headroom for this week.";
+  }
+  return kit;
+}
+
+/** Honest label attached wherever meal totals are shown. */
+function mealEstimateLabel(meals?: MealEntry[]): string {
+  if (!meals || !meals.length) return "No meals logged — shown values are estimates only.";
+  return "Meal entries are user-entered estimates (not tracked intake). Totals are directional, not exact.";
+}
+
+function fuelSummary(state: AppState): FuelSummary {
+  const today = getPlatformBindings().todayISO();
+  const hRow = (state.hydration || []).find(function (h) { return h.date === today; });
+  const meals = (state.meals || []).filter(function (m) { return logToDate(m.time) === today; });
+  const mealCals = meals.reduce(function (a, m) { return a + (typeof m.calories === "number" ? m.calories : 0); }, 0);
+  const mealProtein = meals.reduce(function (a, m) { return a + (typeof m.proteinG === "number" ? m.proteinG : 0); }, 0);
+  return {
+    date: today,
+    hydrationMl: hRow ? hRow.ml : 0,
+    hydrationLogged: !!hRow,
+    mealsLogged: meals.length,
+    mealCalories: mealCals,
+    mealProteinG: mealProtein,
+    mealEstimateLabel: mealEstimateLabel(meals)
+  };
+}
+
 /* ---------- Session clock math (pure — used by session recording) ---------- */
 
 const SESSION_IDLE_FREEZE_MS = 10 * 60 * 1000; // >10 min closed ⇒ freeze the clock
@@ -895,6 +1259,15 @@ function relDay(iso: string): string {
 }
 
 export {
+  DAY_ORDER,
+  METRICS,
+  SPORTS,
+  sportById,
+  sportsInGroup,
+  metricDefs,
+  formatMetric,
+  activityMetrics,
+  validateActivity,
   EXERCISES,
   GOAL_LABELS,
   EQUIP_LABELS,
@@ -913,8 +1286,13 @@ export {
   effectivePlanDay,
   rebalanceWeek,
   recentTopSets,
+  recoverySeries,
+  restDayRecommendation,
+  mealEstimateLabel,
+  fuelSummary,
   elapsedSec,
   resumeSession,
+  runningIntervalSummary,
   SESSION_IDLE_FREEZE_MS,
   fmt,
   fmtPace,

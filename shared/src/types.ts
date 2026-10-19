@@ -95,6 +95,44 @@ export interface HydrationEntry {
   [key: string]: unknown;
 }
 
+export interface MealEntry {
+  time: string;
+  calories?: number;
+  proteinG?: number;
+  [key: string]: unknown;
+}
+
+/** One day of the recovery series (fuel + readiness + training load). */
+export interface RecoveryDay {
+  date: string;
+  weekday: string;
+  rest: boolean;
+  readiness: { energy?: number; soreness?: number } | null;
+  hydration: number | null;
+  meals: number;
+}
+
+/** Plain-language rest-day suggestion — never a medical judgment. */
+export interface RestDayKit {
+  trainingDaysLast7: number;
+  lowEnergyDaysLast7: number;
+  suggestion: string | null;
+  why: string;
+  confidence: number;
+  source: string;
+}
+
+/** Today's fuel totals, always carrying its own estimate label. */
+export interface FuelSummary {
+  date: string;
+  hydrationMl: number;
+  hydrationLogged: boolean;
+  mealsLogged: number;
+  mealCalories: number;
+  mealProteinG: number;
+  mealEstimateLabel: string;
+}
+
 export interface Settings {
   unit?: Unit;
   restSeconds?: number;
@@ -120,6 +158,7 @@ export interface AppState {
   readiness?: ReadinessEntry[];
   weekPlan?: WeekPlanState | null;
   hydration?: HydrationEntry[];
+  meals?: MealEntry[];
   activeSession?: ClockState | null;
   coachThread?: { role?: string; text?: string; ts?: number }[];
   settings?: Settings;
@@ -154,6 +193,34 @@ export interface RunningPR {
   durationSec?: number;
   date: string;
   sessionId?: string;
+}
+
+export interface RunningIntervalSegment {
+  index: number;
+  segmentType: "work" | "rest";
+  targetDurationSec: number;
+  /** Recorded duration once the segment is done; null/absent while pending. */
+  durationSec?: number | null;
+  done?: boolean;
+}
+
+export interface RunningIntervalTemplate {
+  name: string;
+  segments: RunningIntervalSegment[];
+}
+
+export interface RunningIntervalSummary {
+  segments: RunningIntervalSegment[];
+  totalTime: number;
+  distKm: number | null;
+  avgPaceSecPerKm: number | null;
+  totalWorkSec: number;
+  totalRestSec: number;
+  workCount: number;
+  restCount: number;
+  lastSegmentIndex: number;
+  template: RunningIntervalTemplate | null;
+  completedSegments: number;
 }
 
 export interface Insight {

@@ -318,6 +318,59 @@ describe("coach rules", () => {
   });
 });
 
+/* ---------- sport model ---------- */
+
+describe("sport model", () => {
+  it("covers the advertised activity list", () => {
+    expect(Domain.SPORTS.length).toBe(14);
+  });
+  it("boxing records rounds", () => {
+    expect(Domain.sportById("boxing")?.metrics).toContain("rounds");
+  });
+  it("running does not record rounds", () => {
+    expect(Domain.sportById("running")?.metrics).not.toContain("rounds");
+  });
+  it("unknown sport has no metric definitions", () => {
+    expect(Domain.metricDefs("quidditch")).toEqual([]);
+  });
+  it("combat sports are grouped together", () => {
+    expect(Domain.sportsInGroup("combat").length).toBe(4);
+  });
+  it("run metrics include derived pace", () => {
+    const m = Domain.activityMetrics({ sport: "running", durationSec: 1500, distanceM: 5000 }, "metric");
+    expect(m.some((x) => x.key === "pace" && x.value === "5:00")).toBe(true);
+  });
+  it("run metrics never include rounds", () => {
+    const m = Domain.activityMetrics({ sport: "running", durationSec: 1500, distanceM: 5000 }, "metric");
+    expect(m.every((x) => x.key !== "rounds")).toBe(true);
+  });
+  it("absent metrics are not invented", () => {
+    const m = Domain.activityMetrics({ sport: "running", durationSec: 600 }, "metric");
+    expect(m.every((x) => x.key !== "distanceM" && x.key !== "pace")).toBe(true);
+  });
+  it("boxing reports rounds", () => {
+    const m = Domain.activityMetrics({ sport: "boxing", rounds: 6 }, "metric");
+    expect(m.some((x) => x.key === "rounds" && x.value === "6")).toBe(true);
+  });
+  it("valid run passes validation", () => {
+    expect(Domain.validateActivity({ sport: "running", durationSec: 1800, distanceM: 5000 }).ok).toBe(true);
+  });
+  it("negative duration is rejected and names the field", () => {
+    const r = Domain.validateActivity({ sport: "running", durationSec: -5 });
+    expect(r.ok).toBe(false);
+    expect(r.errors[0].field).toBe("durationSec");
+  });
+  it("fractional reps are rejected", () => {
+    expect(Domain.validateActivity({ sport: "strength", reps: 4.5 }).ok).toBe(false);
+  });
+  it("unknown sport is rejected", () => {
+    expect(Domain.validateActivity({ sport: "quidditch", durationSec: 60 }).ok).toBe(false);
+  });
+  it("metrics the sport cannot record are ignored, not errors", () => {
+    expect(Domain.validateActivity({ sport: "running", durationSec: 600, rounds: 3 }).ok).toBe(true);
+  });
+});
+
 /* ---------- formatting ---------- */
 
 describe("formatting", () => {
@@ -366,6 +419,42 @@ describe("nextPlannedSession", () => {
 /* ---------- session clock math ---------- */
 
 describe("session clock math", () => {
+
+  it("runningIntervalSummary counts work/rest and completed segments", () => {
+    const summary = Domain.runningIntervalSummary({
+      durationSec: 500,
+      distanceM: 2500,
+      intervalTemplate: {
+        name: "Tempo Intervals",
+        segments: [
+          { index: 0, segmentType: "work", targetDurationSec: 100, durationSec: 100, done: true },
+          { index: 1, segmentType: "rest", targetDurationSec: 100, durationSec: 100, done: true },
+          { index: 2, segmentType: "work", targetDurationSec: 100, durationSec: null, done: false },
+          { index: 3, segmentType: "rest", targetDurationSec: 100, durationSec: null, done: false }
+        ]
+      },
+      intervalSegments: [
+        { index: 0, segmentType: "work", targetDurationSec: 100, durationSec: 100, done: true },
+        { index: 1, segmentType: "rest", targetDurationSec: 100, durationSec: 100, done: true },
+        { index: 2, segmentType: "work", targetDurationSec: 100, durationSec: null, done: false },
+        { index: 3, segmentType: "rest", targetDurationSec: 100, durationSec: null, done: false }
+      ]
+    });
+    expect(summary.workCount).toBe(2);
+    expect(summary.restCount).toBe(2);
+    expect(summary.completedSegments).toBe(2);
+    expect(summary.totalWorkSec).toBe(100);
+    expect(summary.totalRestSec).toBe(100);
+  });
+
+  it("runningIntervalSummary with no interval data reports zero work", () => {
+    const summary = Domain.runningIntervalSummary({ durationSec: 600 });
+    expect(summary.workCount).toBe(0);
+    expect(summary.completedSegments).toBe(0);
+    expect(summary.lastSegmentIndex).toBe(-1);
+    expect(summary.template).toBeNull();
+  });
+
   const mNow = Date.now();
 
   it("elapsed counts live time", () => {

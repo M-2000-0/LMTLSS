@@ -1,0 +1,30 @@
+{
+  "name": "@lmtlss/shared",
+  "version": "0.1.0",
+  "private": true,
+  "description": "Pure TypeScript domain layer for LMTLSS — ported from js/domain.js. Zero DOM, zero React Native, zero storage imports; platform state is injected.",
+  "main": "src/index.ts",
+  "scripts": {
+    "test": "jest",
+    "typecheck": "tsc --noEmit",
+    "lint": "eslint ."
+  },
+  "jest": {
+    "preset": "ts-jest",
+    "testEnvironment": "node",
+    "roots": [
+      "<rootDir>/src",
+      "<rootDir>/__tests__"
+    ]
+  },
+  "devDependencies": {
+    "@eslint/js": "^9.0.0",
+    "@types/jest": "^29.5.14",
+    "@types/node": "^24.0.0",
+    "eslint": "^9.0.0",
+    "jest": "^29.7.0",
+    "ts-jest": "^29.4.0",
+    "typescript": "~5.9.3",
+    "typescript-eslint": "^8.0.0"
+  }
+}

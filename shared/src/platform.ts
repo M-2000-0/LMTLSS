@@ -29,10 +29,16 @@ export function emptyState(): AppState {
   };
 }
 
-/** Identical to js/store.js todayISO() — date-only UTC (YYYY-MM-DD). */
+function pad2(n: number): string { return (n < 10 ? "0" : "") + n; }
+
+/**
+ * Identical to js/store.js todayISO() — the athlete's LOCAL calendar day
+ * (YYYY-MM-DD). Deliberately not a UTC slice: at 7 pm in UTC-6 the UTC text is
+ * already tomorrow, which filed evening entries under the next day.
+ */
 export function todayISO(date?: Date | string | number): string {
   const dt = date ? new Date(date) : new Date();
-  return dt.toISOString().slice(0, 10);
+  return dt.getFullYear() + "-" + pad2(dt.getMonth() + 1) + "-" + pad2(dt.getDate());
 }
 
 /** Identical to js/ui.js plural() — "1 exercise" / "3 sets". */
@@ -43,7 +49,7 @@ export function plural(n: number, word: string): string {
 export interface PlatformBindings {
   /** Current persisted state (web: Store.get(); mobile: stored state). */
   getState(): AppState;
-  /** Date-only UTC string for a given moment (defaults to now). */
+  /** Local calendar day (YYYY-MM-DD) for a given moment (defaults to now). */
   todayISO(date?: Date | string | number): string;
   /** Count + word formatting used by insight copy. */
   plural(n: number, word: string): string;
