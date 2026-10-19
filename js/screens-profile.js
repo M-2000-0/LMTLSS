@@ -109,6 +109,23 @@
       el("p", { class: "micro muted-2 mt-3", text: "LMTLSS never shows a capability as working before it is implemented and tested." })
     ]));
 
+    /* Admin prototype — honest label, local only */
+    screen.appendChild(el("div", { class: "section" }, [
+      el("div", { class: "section-head" }, [el("h2", { class: "section-title", text: "Admin" })]),
+      el("div", { class: "panel" }, [
+        el("a", {
+          class: "panel-row", href: "admin.html",
+          style: "text-decoration:none;color:inherit"
+        }, [
+          el("div", {}, [
+            el("div", { style: "font-weight:600", text: "Pricing & Plans (prototype)" }),
+            el("div", { class: "micro muted-2 mt-2", text: "Local admin prototype — plans, offers, entitlements. No payment processing." })
+          ]),
+          UI.icon("chevron")
+        ])
+      ])
+    ]));
+
     /* Data */
     screen.appendChild(el("div", { class: "section" }, [
       el("div", { class: "section-head" }, [el("h2", { class: "section-title", text: "Your data" })]),
