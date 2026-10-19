@@ -1,0 +1,14 @@
+{
+  "name": "lmtlss",
+  "version": "1.0.0",
+  "private": true,
+  "description": "LMTLSS — monorepo root scripts. Web reference app (index.html) has no build step; app/ (Expo), shared/ (pure domain TS) and server/ (dependency-free Worker API) each keep their own package.json.",
+  "scripts": {
+    "test": "npm --prefix shared test && npm --prefix app test && npm run test:server",
+    "test:shared": "npm --prefix shared test",
+    "test:app": "npm --prefix app test",
+    "test:server": "node --test \"server/tests/**/*.test.js\"",
+    "typecheck": "npm --prefix shared run typecheck && npm --prefix app run typecheck && node --check server/src/worker.js",
+    "lint": "npm --prefix shared run lint && npm --prefix app run lint"
+  }
+}

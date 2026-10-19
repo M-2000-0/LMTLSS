@@ -1,3 +1,10 @@
+# Dependencies / build output (app/, shared/)
+node_modules/
+.expo/
+dist/
+*.tsbuildinfo
+install.log
+
 # Platform / local tooling
 .freebuff/
 
