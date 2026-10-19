@@ -61,5 +61,12 @@
   /* Layout */
   --nav-h: 64px;
   --content-max: 640px;
+
+  /* Safe-area insets — used by fixed UI and by layout padding when the viewport needs it.
+     bottom is the main one used today (home/pwa bar on notched iPhones and some browsers).
+     top/left/right are included for completeness and future use. */
   --safe-b: env(safe-area-inset-bottom, 0px);
+  --safe-t: env(safe-area-inset-top, 0px);
+  --safe-l: env(safe-area-inset-left, 0px);
+  --safe-r: env(safe-area-inset-right, 0px);
 }

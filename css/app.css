@@ -14,7 +14,27 @@ html, body {
   text-rendering: optimizeLegibility;
 }
 
-body { overscroll-behavior-y: none; }
+body {
+  overscroll-behavior-y: none;
+  padding-top: var(--safe-t);
+}
+
+/* Prevent fixed/floating UI from sliding under notches and home indicators. */
+body::before,
+body::after {
+  content: "";
+  position: fixed;
+  pointer-events: none;
+  z-index: 70;
+}
+body::before {
+  top: 0; left: 0; right: 0;
+  height: var(--safe-t);
+}
+body::after {
+  bottom: 0; left: 0; right: 0;
+  height: var(--safe-b);
+}
 
 /* Icons default to a fixed size; charts/sparklines override via class or inline style */
 svg { width: 20px; height: 20px; flex-shrink: 0; }
@@ -54,16 +74,23 @@ a { color: var(--accent); }
 
 /* ---------- Layout ---------- */
 
-.app { min-height: 100dvh; display: flex; flex-direction: column; }
+.app {
+  min-height: 100dvh;
+  display: flex;
+  flex-direction: column;
+  padding-top: var(--safe-t);
+}
 
 .main {
   flex: 1;
   width: 100%;
   max-width: var(--content-max);
   margin: 0 auto;
-  padding: var(--sp-5) var(--sp-4) calc(var(--nav-h) + var(--safe-b) + var(--sp-8));
+  padding: var(--sp-5) var(--sp-4)
+    calc(var(--nav-h) + var(--safe-b) + var(--sp-8));
   outline: none;
 }
+
 
 .screen { animation: screen-in var(--t-med) var(--ease); }
 @keyframes screen-in {
@@ -739,7 +766,8 @@ textarea.input { min-height: 80px; resize: vertical; }
 /* ---------- Desktop ---------- */
 
 @media (min-width: 900px) {
-  .main { padding-top: var(--sp-8); }
+  .app { padding-top: 0; }
+  .main { padding-top: calc(60px + var(--sp-8)); }
 
   .bottom-nav {
     top: 0; bottom: auto;
@@ -753,7 +781,6 @@ textarea.input { min-height: 80px; resize: vertical; }
   .nav-item {
     flex: 0 0 auto;
     flex-direction: row;
-    gap: var(--sp-2);
     padding: 0 var(--sp-4);
     font-size: var(--fs-small);
     height: 100%;
@@ -761,7 +788,13 @@ textarea.input { min-height: 80px; resize: vertical; }
   .nav-dot { display: none; }
   .nav-item[aria-current="page"] { background: var(--surface); border-radius: var(--r-md); }
 
+  body { padding-top: 0; }
+  body::before { display: none; }
+  body::after { display: none; }
+  .app { padding-top: 0; }
   .main { padding-top: calc(60px + var(--sp-8)); }
+  .nav-dot { display: none; }
+  .nav-item[aria-current="page"] { background: var(--surface); border-radius: var(--r-md); }
 
   .session-live-inner { padding-top: calc(60px + var(--sp-6)); }
   .session-dock { top: 60px; bottom: auto; border-top: none; border-bottom: 1px solid var(--border); }
@@ -769,6 +802,5 @@ textarea.input { min-height: 80px; resize: vertical; }
 
   .sheet { border-radius: var(--r-lg); max-width: 520px; margin: auto; max-height: 80dvh; }
   .overlay { align-items: center; }
-
   .grid-2-wide { display: grid; grid-template-columns: 1fr 1fr; gap: var(--sp-5); align-items: start; }
 }
