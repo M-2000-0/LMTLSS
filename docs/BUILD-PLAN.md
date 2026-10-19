@@ -31,7 +31,7 @@ This plan answers three questions: what to build in this environment, which capa
 - Google Play developer account (US$25 once)
 - Physical devices: Android (API 26+) and iPhone — GPS and background tests cannot pass without them
 - Expo account (EAS free tier to start; watch build-minute limits)
-- Map provider account (evaluate Mapbox free tier vs. self-hosted OSM tiles — verify costs/licensing, "free library ≠ free map data") — quoted prices for this decision now live in §7.
+- ~~Map provider account~~ — **not needed for M2**: the decided stack (MapLibre + OpenFreeMap) requires no account or key ([decision](MAP-ADAPTER-DECISION.md)). A MapTiler or Mapbox account is only needed if the production gate switches providers; quoted prices live in §7.2.
 - Later: FCM/APNs credentials, store assets, signing strategy
 
 ---
@@ -59,7 +59,7 @@ Rules: `shared/` has zero React Native imports (testable in plain Jest); `app/` 
 | Onboarding, home, progress, profile UI | RN components + design tokens | No | No | E2E both platforms |
 | **GPS recording (start/pause/resume/finish, background)** | Platform location services behind adapter (expo-location dev-build config) | **Yes** | No | **Physical devices only** (protocol §5) |
 | Distance/pace/splits from points (noise filtering) | Local math on validated points; server recompute on sync | No | No | Fixture tests + device runs |
-| Route map rendering | Licensed map SDK/tiles behind adapter | Depends on SDK | **Yes** (tiles/data licensing + costs) | Device + fixture routes; licensing doc |
+| Route map rendering | **MapLibre RN + OpenFreeMap** behind adapter (decided 2026-10-19; [decision](MAP-ADAPTER-DECISION.md)) | **Yes** (native module → dev build) | **Yes** (public tile instance, no key) | Device + fixture routes; availability + offline measurement |
 | Share Studio card generation | Deterministic templates, local render + worker fallback | No | No | Fixture-based image tests |
 | Native share sheet | RN Share API | **Yes** | No | Device matrix |
 | Snap Kit / Instagram sharing | Per-adapter integration | SDK | **Yes** | Capability matrix per adapter — investigate before building |
@@ -88,6 +88,7 @@ Each milestone has a real Definition of Done; a screen existing is never complet
 
 **M2 — GPS running + Share Studio** (owner's steps 1–2)
 - Activity Recording Service per [MASTER-PROMPT](MASTER-PROMPT.md) addendum §1: background tracking, point buffering, noise filtering, dedupe, provenance labels; route visualization behind licensed adapter (§2); Share Studio editor (templates, captions, metric hiding, route-privacy masks, aspect ratios, export fallback).
+- **Map adapter decided (2026-10-19):** **MapLibre React Native + OpenFreeMap** public instance, behind a provider-swappable adapter and **conditional for production** (no SLA; see the production gate) — [MAP-ADAPTER-DECISION](MAP-ADAPTER-DECISION.md). MapLibre is a native module, so **M2 requires a development build**; Expo Go cannot load it.
 - Physical-device test protocol executed and logged (§5).
 - DoD: J6 + J9 acceptance criteria met on real iOS and Android devices.
 
@@ -167,6 +168,51 @@ Each value was read from an official vendor or policy page in **October 2026** a
 | OSM US tileservice | Free **non-commercial** Starter tier only; revenue-generating use requires written permission | [usage policy](https://tiles.openstreetmap.us/usage-policy/) |
 | Self-hosting reference | Hetzner CX33 **€8.49/mo** (4 vCPU / 8 GB), CPX32 **€35.49/mo** — **instance price only**: excludes dataset build, storage, backups, monitoring and admin time, and does not prove production adequacy | [Hetzner price adjustment, 2026-06-15](https://docs.hetzner.com/general/infrastructure-and-availability/price-adjustment/) |
 
-**Decision-relevant read:** Mapbox is **$0 up to ~25k monthly active users** of its mobile SDK — free through pre-launch and early growth, billed per MAU thereafter. OpenFreeMap is $0 with permissive written terms but explicitly no SLA; MapTiler Flex is a keyed **$30/mo** middle ground with published quotas; raw OSMF tiles are explicitly not a production app endpoint. Vendor decision stays M2/gate time, behind the adapter per §2.
+**Decision-relevant read:** Mapbox is **$0 up to ~25k monthly active users** of its mobile SDK — free through pre-launch and early growth, billed per MAU thereafter. OpenFreeMap is $0 with permissive written terms but explicitly no SLA; MapTiler Flex is a keyed **$30/mo** middle ground with published quotas; raw OSMF tiles are explicitly not a production app endpoint. The decision itself is recorded below; the production gate, not the M2 start, is where the SLA question is settled.
 
-*Still open:* Snap Kit eligibility; enterprise/region specifics for MapTiler or Mapbox; ODbL attribution implementation choice; final provider decision and its capability matrix.
+**Decided 2026-10-19 — [MAP-ADAPTER-DECISION](MAP-ADAPTER-DECISION.md):** MapLibre React Native `11.5.0` + the OpenFreeMap public instance, behind a provider-swappable adapter, for M2. $0, no API key, commercial use allowed, offline downloads permitted within 3,000 tiles / 50 MB per download — but **no SLA**, one maintainer, and it is **not loadable in Expo Go** (native module → development build). Production is gated on monitoring plus a tested MapTiler Flex / self-host fallback, not granted by this choice.
+
+The compliance skeleton for this adapter decision lives in §7.4.
+
+#### 7.3 OpenFreeMap public instance — provider quiescence (spike: "can I rely on a free tile host, or does it disappear next quarter?")
+
+Each value was read from an official OpenFreeMap page in **October 2026** and is cited inline. Treat the source as the truth for the provider's own words; where a fact is not stated on one of those pages, it is listed as *still open* rather than guessed.
+
+**Precise wording (verbatim quotes):** the public instance is described as "completely free" and "there are no limits on the number of map views or requests", with "no registration, no user database, no API keys, and no cookies", and OpenFreeMap "may be discontinued at any time without notice" and "I don't offer SLA guarantees"; overhead is "nginx serving a Btrfs image with 300 million hard-linked files"; offline downloads are allowed "at most 3,000 tiles or 50 MB" with "at most 4 parallel requests" and "a unique User-Agent identifying your app", and "If you are using MapLibre, they are automatically added, you have nothing to do", and the attribution text requested is "OpenFreeMap © OpenMapTiles Data from OpenStreetMap" with "You do not need to display the OpenFreeMap part, but it is nice if you do". Charges: the maintainer "aims to keep renting servers until they cover the bandwidth" and intends to introduce a Pro plan only if there is "enough interest" — today there is no Pro plan.
+
+| Item | Verified value (October 2026) | Source |
+|---|---|---|
+| Provider identity | Hyperknot Software Kft. (Zsolt Ero), donation-funded, single maintainer | [openfreemap.org](https://openfreemap.org/), [openfreemap.org/tos/](https://openfreemap.org/tos/) |
+| Cost | **Free for all uses of the public instance, including commercial** — no API key, no registration | [openfreemap.org](https://openfreemap.org/), [openfreemap.org/tos/](https://openfreemap.org/tos/) |
+| Offline use in a mobile app | **Allowed within bounds** — each offline download ≤ 3,000 tiles **or** 50 MB, ≤ 4 parallel requests, unique User-Agent; anything larger requires contacting `info@openfreemap.org` | [openfreemap.org/tos/](https://openfreemap.org/tos/), [openfreemap.org/](https://openfreemap.org/) |
+| SLA / availability guarantees | **None provided** — the service is provided "as-is"; the maintainer explicitly states "I don't offer SLA guarantees" | [openfreemap.org/tos/](https://openfreemap.org/tos/), [openfreemap.org/](https://openfreemap.org/) |
+| Termination / discontinuance | **May be discontinued at any time without notice** — a small infrastructure project run by one person | [openfreemap.org/tos/](https://openfreemap.org/tos/) |
+| Sustainability model | The maintainer rents servers and aims to keep them running until bandwidth is covered, with an intent to introduce a Pro plan if there is enough interest; no subscription or support plan exists yet | [openfreemap.org](https://openfreemap.org/) |
+| Governance | **One-person, no board or foundation behind it** — bus factor 1; there is no announced successor process | [openfreemap.org](https://openfreemap.org/), [openfreemap.org/tos/](https://openfreemap.org/tos/) |
+| Self-hosting escape hatch | **Exists and is documented** — the full production setup is open-source (MIT) and can be run yourself or by a host | [openfreemap.org](https://openfreemap.org/) |
+| MapTiler as hosted fallback | The OpenFreeMap page points at MapTiler Cloud for hosted map tiles, so a commercial tile provider is a recognized alternative, not something this project rules out | [openfreemap.org](https://openfreemap.org/) |
+| Traffic / request / cache / IP / rate-limit details | **Not published** — no concrete successor rules, per-IP or per-session limits, or daily map-view counts are stated on the official pages; the provider states "50 MB" without saying how it is measured, so plan against both the tile count and the byte ceiling | [openfreemap.org](https://openfreemap.org/), [openfreemap.org/tos/](https://openfreemap.org/tos/) |
+
+*Still open (not confirmable from the official pages as of October 2026):* concrete successor rules and any notice period for discontinuance; the exact daily map-view count served; whether there is a per-IP or per-session hidden rate limit in front of nginx; whether the maintainer's personal commitments or infrastructure choices make continuation more or less likely.
+
+**Read:** OpenFreeMap is the cheapest and legally cleanest tile source for M2 — free, commercial use, no key, offline downloads allowed within bounds. But it is a quiet, single-maintainer project that may disappear without notice, so it is the right choice for **M2 development and pilot**, and the right *first* choice for nothing more. The production gate in §6 is not bureaucratic pedantry: it is the response to a tile source that the provider itself says can go away any time.
+
+
+
+The decision is not just a vendor pick — it makes a few explicit legal/technical guardrails that follow from what MapLibre, OpenFreeMap, Mapbox, MapTiler, Protomaps, the OSMF tiles policy, OSM copyright, and each vendor's pricing page actually say in October 2026. These are the rules the adapter interface and the map screen must satisfy, not opinions about maps.
+
+1. **Tiles must come from a source the app's terms allow.** For M2 that is the OpenFreeMap public instance. The commercial-use and no-key facts are first-class verified facts in this register, not a belief — they are the reason OpenFreeMap beats MapTiler's free tier (non-commercial only) and OSMF's tile policy (no production app endpoint).
+
+2. **Attribution is non-negotiable and must be visible.** OSM data is ODbL with an attribution obligation, the OpenMapTiles schema is CC-BY, and the requested attribution string for OpenFreeMap is `OpenFreeMap © OpenMapTiles Data from OpenStreetMap`. MapLibre's attribution control adds the required attribution automatically if it remains visible; if a map screen ever makes that control invisible or unreadable, it is a live infringement risk, not a style issue — so the acceptance criteria gate on the attribution control being present and readable.
+
+3. **No tile host may receive recorded route coordinates or user identity.** The route is a local GPX/overlay drawn from device-collected points and is never sent to a tile server. Any analytics on the map surface is out of scope here because it would change the privacy profile of the screen in a way the docs do not currently account for.
+
+4. **No provider secret in the bundle.** A key would live in the client by construction. MapTiler and Mapbox in particular need account keys for their hosted tiles, which is a secret-in-the-bundle problem if used directly from the client — another reason those are fallbacks behind build-time config, not first-class choices.
+
+5. **Offline must degrade without fabricating a map.** MapLibre has offline packs, OpenFreeMap permits bounded offline downloads, and Mapbox's offline story is provider-specific (Mapbox-hosted tilesets only). The map screen must render honestly when offline or when a pack is missing, and must never manufacture a basemap it does not have.
+
+6. **The provider can be swapped without touching screens.** The adapter contract in §7 of [MAP-ADAPTER-DECISION](MAP-ADAPTER-DECISION.md) exists so that moving from OpenFreeMap to MapTiler or self-hosted changes a style URL and an attribution string and possibly an offline-pack config — not any map-screen logic.
+
+7. **No bidirectionality beyond the read-only adapter.** The adapter contract reflects a read-only map (no pan-to-edit, no route dragging). Bidirectional editing support would expand this skeleton; do not add it under the MapLibre decision without a separate review.
+
+**Still open:** none of these skeleton items is unverified *if OpenFreeMap is the provider*; the one concrete compliance check that cannot be verified from documentation is on-device attestation that MapLibre's attribution control renders the required OSM/OpenMapTiles attribution visibly with a live link to `openstreetmap.org/copyright` (already in [MAP-ADAPTER-DECISION §8 A3/A7](MAP-ADAPTER-DECISION.md)).
