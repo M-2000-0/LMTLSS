@@ -35,19 +35,46 @@ open index.html
 
 On first launch you can run the onboarding flow or load clearly-labeled demo data.
 
-## Mobile app (Expo — milestone M0)
+## Mobile app (Expo — milestones M0–M1)
 
-The native iOS + Android app lives in `app/` (Expo SDK, TypeScript strict, ESLint, Jest, React Navigation); `shared/` is the pure TypeScript port of `js/domain.js` used by it. Requires **Node.js LTS** (installed via winget on this machine).
+The native iOS + Android app lives in `app/` (Expo SDK, TypeScript strict, ESLint, Jest, React Navigation); `shared/` is the pure TypeScript port of `js/domain.js` used by it. Requires **Node.js LTS** (installed via winget on this machine). The app imports the domain through its single seam `app/src/domain.ts`; Metro reaches the sibling folder via `watchFolders` in `app/metro.config.js`.
 
 ```bash
 npm --prefix app install   # first run only
-npm test                   # Jest: shared domain (63) + app smoke test (1)
-npm run typecheck          # strict TS across shared/ + app/
+npm test                   # shared Jest (129) + app Jest (21) + server API (60)
+npm run typecheck          # strict TS across shared/ + app/ + a syntax check on the Worker
 npm run lint               # ESLint across shared/ + app/
 npm --prefix app start     # Expo dev server
 ```
 
 The web app keeps its zero-build contract — the two codebases live in parallel, and a parity test fails if `js/domain.js` and `shared/src/domain.ts` ever drift apart on their public API.
+
+### What the native app does today (M1 vertical slice, in progress)
+
+- **Onboarding** collects goal, sports, experience, days/week and equipment; the store hands the profile to `Domain.planFor()` and persists the generated week.
+- **Today** renders the next planned session, a readiness check-in and hydration logging — all values computed by the shared domain from live store state.
+- **Persistence** is one JSON document in AsyncStorage under the same `lmtlss:v1` key and schema version as the web store, with the same migration contract: unknown versions are quarantined (raw bytes preserved) and never silently replaced; a failed write is shown and the change stays in memory.
+- Not built yet, and rendered as unavailable rather than as dead controls: session recording, GPS runs, progress charts, share cards, meal entry.
+
+Run the journey tests with `npm --prefix app test`; the rendered test drives onboarding → Today and asserts the persisted JSON.
+
+### Running the scaffold on a phone
+
+`expo-dev-client` is installed, so plain `expo start` serves a **development build**. With no build installed yet, target Expo Go explicitly:
+
+```bash
+npm --prefix app start -- --go      # then open exp://<your-LAN-IP>:8081 in Expo Go
+```
+
+Android development builds are configured in `app/eas.json` (`development` profile: `developmentClient: true`, `distribution: internal`, `buildType: apk`, package `com.lmtlss.app`):
+
+```bash
+cd app && npx eas-cli@latest login          # interactive, needs an Expo account
+npx eas-cli@latest init                     # writes extra.eas.projectId + owner
+npx eas-cli@latest build --profile development --platform android
+```
+
+No EAS account is connected to this repo yet, so **no cloud build exists** — `eas init` is the first step and it has never been run. A local `expo run:android` instead needs a JDK, Android SDK and a device, none of which are installed on this machine.
 
 ## Documentation
 
@@ -69,18 +96,23 @@ python serve.py 8123
 # open http://127.0.0.1:8123/tests.html
 ```
 
-The suite (130 assertions) covers plan generation across equipment/experience combinations, PR and Epley math, weekly trends, insight honesty, coach rules, formatting, schema-migration/data-quarantine behavior, the live-session clock math (refresh resume + idle freeze), the pricing/entitlement engine (price precedence, custom offers, regional pricing, coupons, volume tiers, quota enforcement, audit trail), and the share-card system (composition, provenance labels, route projection + privacy trim, XML-escaping security). The page title reports `PASS (n)` or `FAIL (n)`.
+The suite (**214 assertions**) covers the 14-sport model and per-sport validation, plan generation across equipment/experience combinations, PR and Epley math, weekly trends, insight honesty, coach rules, formatting, schema-migration/data-quarantine behavior, local-day boundaries (hydration/meals/recovery), the live-session clock math (refresh resume + idle freeze), the pricing/entitlement engine (price precedence, custom offers, regional pricing, coupons, volume tiers, quota enforcement, audit trail), and the share-card system (composition, provenance labels, route projection + privacy trim, XML-escaping security). The page title reports `PASS (n)` or `FAIL (n)`.
 
-The **domain-test sections are also ported to Jest** in `shared/__tests__/` (63 tests, run by `npm test`) — same assertion names as the browser suite, plus a storage-shim seam test and the js/domain ↔ shared/domain export-parity guard. Store-migration, pricing, share-card and UI assertions remain browser-only for now.
+**Everything the browser suite asserts also runs headlessly** in `shared/__tests__/` (129 Jest tests, run by `npm test`): the domain sections are ported assertion-by-assertion, the store migration/quarantine and weekPlan-persistence cases run the real `js/store.js` inside a `node:vm` sandbox, and pricing, share-card, recovery and fuel cases do the same for their modules. A final drift guard executes all 214 browser assertions in that sandbox, so a newly added browser-only test cannot silently rot outside `npm test`. There is also a storage-shim seam test and the js/domain ↔ shared/domain export-parity guard.
+
+`tests.html` stays the interactive oracle: open it when you change the web UI or want to see individual assertion names in a real browser.
+
+The **API suite** lives in `server/` and runs with zero installs: `npm run test:server` (60 tests) drives the real request pipeline against in-memory SQLite — the same dialect Cloudflare D1 uses — with real signed tokens. See [server/README.md](server/README.md) for what is implemented, what is configured, and what is still missing.
 
 ## Structure
 
 ```
 index.html        app shell
 tests.html        test harness
-package.json      root scripts: npm test / typecheck / lint (delegates to app/ + shared/)
+package.json      root scripts: npm test / typecheck / lint (delegates to app/ + shared/ + server/)
 app/              Expo + React Native app (TypeScript strict; the product)
 shared/           pure TS domain layer — Jest-tested port of js/domain.js
+server/           LMTLSS API — dependency-free Cloudflare Worker + D1, node:test suite (not deployed)
 admin.html        Pricing & Plans admin prototype (local, no billing)
 serve.py          dev static server (no-store caching)
 css/tokens.css    brand + design tokens
@@ -116,6 +148,7 @@ Green is a functional color, never decoration. No second accent color.
 - **Phase 1 (this repo)** — foundation: brand system, onboarding, adaptive home, strength + running, logging, history, basic analytics, responsive + accessible components, tests.
 - **Phase 2** — training intelligence: adaptive calendar, deeper coach, recovery and nutrition foundations, more sport workflows.
 - **Phase 3** — connected ecosystem: wearable integrations, expanded sports, community and discovery.
+  - Clubs and Events now have a **tested server API** ([server/README.md](server/README.md)): communities with approval-based membership and moderation, events with real capacity, waitlists and auto-promotion. It is **not deployed** and the web app does not call it yet — there is no sign-in provider, so no athlete can obtain a token, and no screen pretends otherwise.
 
 Integrations (GPS, wearables, health platforms) are shown as **Unavailable** until they are genuinely implemented and tested — the product never presents a mock capability as working.
 

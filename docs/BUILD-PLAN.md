@@ -16,7 +16,7 @@ This plan answers three questions: what to build in this environment, which capa
 | Tool | Status on this machine | Consequence |
 |---|---|---|
 | winget | ✅ present | Node.js installable by the agent (may require one UAC approval) |
-| node / npm / npx | ❌ missing | **M0 step 1** — install Node LTS |
+| node / npm / npx | ✅ v24.20.0 LTS + npm 11.19.0 (winget, 2026-10-17) | Installed for M0; shells started before the install may need a PATH refresh |
 | JDK / Android SDK / Gradle | ❌ missing | Local Android emulator optional; heavy install (~GBs) |
 | Xcode / macOS | ❌ impossible on Windows | **iOS builds must run on EAS Build (Expo cloud)** |
 | Docker | ❌ missing | Local Postgres → use a lightweight alternative or hosted DB for backend work |
@@ -31,7 +31,7 @@ This plan answers three questions: what to build in this environment, which capa
 - Google Play developer account (US$25 once)
 - Physical devices: Android (API 26+) and iPhone — GPS and background tests cannot pass without them
 - Expo account (EAS free tier to start; watch build-minute limits)
-- Map provider account (evaluate Mapbox free tier vs. self-hosted OSM tiles — verify costs/licensing, "free library ≠ free map data")
+- Map provider account (evaluate Mapbox free tier vs. self-hosted OSM tiles — verify costs/licensing, "free library ≠ free map data") — quoted prices for this decision now live in §7.
 - Later: FCM/APNs credentials, store assets, signing strategy
 
 ---
@@ -84,6 +84,7 @@ Each milestone has a real Definition of Done; a screen existing is never complet
 - Onboarding → personalized plan → strength session → time-only run → saved activity → progress summary → shareable card.
 - Offline-first local persistence; interruption recovery (Phase 1 behavior preserved: idle-gap pause, never discard).
 - DoD: spec §14 acceptance (1–7) passing on **both** platforms via dev builds.
+- **Status 2026-10-19 — slice started, first leg done:** `app/src/store/` owns a schema-v1 JSON document in AsyncStorage (same key + migration/quarantine contract as `js/store.js`), binds it into the shared domain via `setPlatformBindings`, and persists through a serialised write queue that surfaces failures instead of dropping entries. Onboarding generates the plan with `Domain.planFor()`; Today renders the next session, readiness and hydration from domain reads. Verified by 21 app Jest tests including a rendered onboarding → Today journey (Jest/AsyncStorage mock), plus an Expo Go dev bundle. **Still open:** session recording, time-only run, saved activity, progress summary, share card, and any run on a physical device.
 
 **M2 — GPS running + Share Studio** (owner's steps 1–2)
 - Activity Recording Service per [MASTER-PROMPT](MASTER-PROMPT.md) addendum §1: background tracking, point buffering, noise filtering, dedupe, provenance labels; route visualization behind licensed adapter (§2); Share Studio editor (templates, captions, metric hiding, route-privacy masks, aspect ratios, export fallback).
@@ -129,4 +130,43 @@ For each of iOS and Android: fresh install → permission grant → 20+ min outd
 - Milestones are strictly ordered; integrations (M5) never precede the core loop demonstrating retention (M1–M2).
 - Every PR: typecheck + lint + full test suite; every milestone: updated capability matrix and README.
 - The agent reads existing code and design system before changes, reuses components, creates migrations, and runs regression tests — never blind generation (Product Builder principle).
-- Unknowns (map costs, Snap Kit eligibility, EAS minute budgets) are spiked early in the milestone that needs them and recorded here.
+- Unknowns (map costs, Snap Kit eligibility, EAS minute budgets) are spiked early in the milestone that needs them and recorded in **§7 Unknowns register** below (first spike, October 2026: EAS free-tier limits + Mapbox/OSM tile pricing).
+
+---
+
+## 7. Unknowns register (spiked results)
+
+Each value was read from an official vendor or policy page in **October 2026** and is cited inline. Pricing drifts — re-verify before committing budget. Anything not confirmable from a primary source is listed as *still open* rather than guessed.
+
+### 7.1 EAS Build free-tier limits (spike: "EAS minute budgets"; needed for M0–M2 dev builds)
+
+| Item | Verified value (October 2026) | Source |
+|---|---|---|
+| Free build quota | **15 Android + 15 iOS builds per month** (30 total) | [expo.dev/pricing](https://expo.dev/pricing) |
+| CI/CD Workflows minutes (separate allowance) | **60 min/month** — a workflows allowance, **not** a per-build time budget. Paid per-minute job rates: $0.018 Linux medium · $0.035 Linux large · $0.075 macOS medium · $0.150 macOS large | [expo.dev/pricing](https://expo.dev/pricing), [usage-based pricing](https://docs.expo.dev/billing/usage-based-pricing/) |
+| Concurrency (Free) | **5 concurrent jobs total, max 1 macOS** | [expo.dev/pricing.md](https://expo.dev/pricing.md) |
+| Build timeout (Free) | **45 minutes per build** | [expo.dev/pricing.md](https://expo.dev/pricing.md) |
+| EAS Update (Free) | **Unlimited updates · 1,000 monthly active users · 100 GiB edge bandwidth · 20 GiB storage** | [expo.dev/pricing](https://expo.dev/pricing), [EAS Update docs](https://docs.expo.dev/eas-update/introduction/) |
+| Quota reset / exhaustion | Resets the **1st day of each calendar month**; Free **never overages** — builds are blocked until reset (or build locally / upgrade) | [billing FAQ](https://docs.expo.dev/billing/faq/) |
+| Next paid tiers | **Starter $19/mo** + usage (adds $45 build credit, updates to 3,000 MAUs) · **Production $199/mo** + usage (adds $225 credit, 15 concurrency, updates to 50,000 MAUs) | [expo.dev/pricing](https://expo.dev/pricing), [billing FAQ](https://docs.expo.dev/billing/faq/) |
+
+*Still open (not confirmable from official pages):* build-artifact retention in days; whether Free workflow minutes are counted differently on Linux vs macOS; what happens when the 60 workflow minutes are exhausted; any separate AI-build minute rule.
+
+**Read:** the binding constraint is the **monthly build count** (≈15 per platform), not minutes — normal M0–M2 iteration pace fits free tier with headroom; schedule device-heavy milestone batches away from month-end-quota exhaustion.
+
+### 7.2 Mapbox vs OSM tile pricing (spike: "map costs"; needed for M2 route rendering)
+
+| Option | Verified price / terms (October 2026) | Source |
+|---|---|---|
+| **Mapbox Maps SDKs (iOS/Android)** | Billed **per monthly active user** (not per map load): first **25,000 MAU free**, then **$4.00 / 1,000 MAU** (25,001–125k), **$3.20 / 1,000** (125k–250k), **$2.40 / 1,000** (250k+); ≥1.25M = contact sales | [mapbox.com/pricing](https://www.mapbox.com/pricing), MAU definition in [iOS](https://docs.mapbox.com/ios/maps/guides/pricing/) / [Android](https://docs.mapbox.com/android/maps/guides/pricing/) guides |
+| Mapbox direct tile APIs (only if bypassing the SDK) | Vector Tiles: first **200,000 requests per billing period free**, then **$0.25 / 1,000**; Static Tiles: 200,000 free, then **$0.50 / 1,000** (both fall to $0.15 / $0.30 at 4M+ requests) | [mapbox.com/pricing](https://www.mapbox.com/pricing), [Static Tiles docs](https://docs.mapbox.com/api/maps/static-tiles/) |
+| Mapbox blanket "$100/mo usage credit" | **Not confirmed** — current billing docs describe product-specific free tiers only, no blanket credit | [pay-as-you-go FAQ](https://www.mapbox.com/accounts/faq/how-does-pay-as-you-go-billing-work/) |
+| `tile.openstreetmap.org` | **No published numeric request limit and no SLA**; stable `User-Agent` required, cache tiles **≥ 7 days**, **no offline/bulk/prefetch**; access may be blocked or withdrawn. Not a production app API | [OSMF tile usage policy](https://operations.osmfoundation.org/policies/tiles/) |
+| **OpenFreeMap public instance** | **$0 — stated “no limits” on views/requests, no API key, commercial use allowed**; offline downloads ≤ 3,000 tiles / 50 MB each, ≤ 4 parallel requests; provided as-is, may be discontinued at any time (no SLA) | [openfreemap.org](https://openfreemap.org/), [ToS](https://openfreemap.org/tos/) |
+| **MapTiler Cloud** (the hosted route OpenMapTiles itself points to) | **Free $0**: 100,000 API requests + 5,000 map sessions/month, **testing / non-commercial use only**. **Flex $30/month**: 500,000 requests + 25,000 sessions; overage **$0.15 / 1,000 requests**, **$2.50 / 1,000 map sessions** (512 px raster tile counts as 4 requests; vector tile = 1) | [MapTiler pricing](https://www.maptiler.com/cloud/pricing/), [sessions vs requests](https://docs.maptiler.com/guides/account/sessions-vs-requests/) |
+| OSM US tileservice | Free **non-commercial** Starter tier only; revenue-generating use requires written permission | [usage policy](https://tiles.openstreetmap.us/usage-policy/) |
+| Self-hosting reference | Hetzner CX33 **€8.49/mo** (4 vCPU / 8 GB), CPX32 **€35.49/mo** — **instance price only**: excludes dataset build, storage, backups, monitoring and admin time, and does not prove production adequacy | [Hetzner price adjustment, 2026-06-15](https://docs.hetzner.com/general/infrastructure-and-availability/price-adjustment/) |
+
+**Decision-relevant read:** Mapbox is **$0 up to ~25k monthly active users** of its mobile SDK — free through pre-launch and early growth, billed per MAU thereafter. OpenFreeMap is $0 with permissive written terms but explicitly no SLA; MapTiler Flex is a keyed **$30/mo** middle ground with published quotas; raw OSMF tiles are explicitly not a production app endpoint. Vendor decision stays M2/gate time, behind the adapter per §2.
+
+*Still open:* Snap Kit eligibility; enterprise/region specifics for MapTiler or Mapbox; ODbL attribution implementation choice; final provider decision and its capability matrix.
