@@ -1,0 +1,28 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 120 120" width="84" height="84" aria-label="LMTLSS" role="img" focusable="false">
+  <defs>
+    <linearGradient id="pill-body" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0" stop-color="#7CFF3E"/>
+      <stop offset="0.5" stop-color="#00E000"/>
+      <stop offset="1" stop-color="#00A800"/>
+    </linearGradient>
+    <radialGradient id="pill-highlight" cx="0.35" cy="0.25" r="0.6">
+      <stop offset="0" stop-color="#FFFFFF" stop-opacity="0.85"/>
+      <stop offset="0.25" stop-color="#FFFFFF" stop-opacity="0.35"/>
+      <stop offset="1" stop-color="#FFFFFF" stop-opacity="0"/>
+    </radialGradient>
+  </defs>
+
+  <rect x="14" y="30" width="92" height="60" rx="30" ry="30" fill="url(#pill-body)"/>
+  <rect x="14" y="30" width="92" height="34" rx="30" ry="30" fill="url(#pill-highlight)"/>
+  <path d="M24 30 a30 30 0 0 1 52 0" fill="none" stroke="#FFFFFF" stroke-opacity="0.55" stroke-width="3" stroke-linecap="round"/>
+  <circle cx="30" cy="46" r="6" fill="#FFFFFF" opacity="0.9"/>
+  <circle cx="90" cy="50" r="4" fill="#FFFFFF" opacity="0.85"/>
+
+  <!-- Down-triangle on the right side of the pill, past the wordmark -->
+  <path d="M98 58 L106 74 L90 74 Z" fill="#000000"/>
+
+  <text x="60" y="66" text-anchor="middle" dominant-baseline="central"
+        font-family="system-ui, -apple-system, 'Segoe UI', Roboto, sans-serif"
+        font-size="22" font-weight="800" letter-spacing="2"
+        fill="#000000">LMTLSS</text>
+</svg>

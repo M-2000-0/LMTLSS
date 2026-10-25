@@ -1,0 +1,3 @@
+  function sportById(id) {
+    return SPORTS.find(function (s) { return s.id === id; }) || null;
+  }

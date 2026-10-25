@@ -1,0 +1,144 @@
+  function rebalanceWeek(state, nowMs) {
+    const now = typeof nowMs === "number" ? nowMs : Date.now();
+    const bounds = weekBounds(now);
+    const base = {
+      weekStart: bounds.startISO,
+      changes: [],
+      moves: {},
+      dropped: [],
+      readiness: null,
+      summary: ""
+    };
+    const plan = (state.plan && state.plan.sessions) || [];
+    if (!plan.length) {
+      base.summary = "No plan yet — nothing to rebalance.";
+      return base;
+    }
+    const log = state.log || [];
+    const wp = weekPlanFor(state, now);
+    const alreadyDropped = (wp && wp.dropped) || [];
+    const logThisWeek = log.filter(function (x) { return withinWeek(x.startedAt, bounds); }).length;
+
+    // Classify: done / missed (day already passed) / still pending.
+    const pending = [], missed = [];
+    plan.forEach(function (p) {
+      if (alreadyDropped.indexOf(p.id) >= 0) return;
+      const effDay = effectivePlanDay(p, state, now);
+      const effIdx = dayIndexOf(effDay);
+      if (effIdx < 0) return; // malformed day — skip, never crash
+      if (planSessionDone(p, log, bounds, effIdx)) return;
+      const entry = { sess: p, effIdx: effIdx, effDay: effDay };
+      if (effIdx < bounds.todayIdx) missed.push(entry); else pending.push(entry);
+    });
+
+    const trigger = readinessTrigger(state, now, bounds);
+    base.readiness = trigger.active
+      ? { date: trigger.date, energy: trigger.energy, soreness: trigger.soreness, avg: trigger.avg }
+      : null;
+
+    // Occupy pending days; today's hard session is held back when readiness is low.
+    const occupied = {};
+    pending.forEach(function (e) {
+      if (trigger.active && e.effIdx === bounds.todayIdx && isHardSession(e.sess)) return;
+      occupied[e.effIdx] = e.sess;
+    });
+
+    const changes = base.changes, moves = base.moves, dropped = base.dropped;
+    const padDay = function (n) { return DAY_ORDER[n]; };
+    const missedSource = "Your weekly plan compared with this week's logged sessions (matched by plan item, or by sport and weekday for older entries).";
+
+    const readinessWhy = function (e, toDay) {
+      let head;
+      if (trigger.basis === "today") {
+        head = "Check-in " + trigger.date + ": energy " + (trigger.energy !== null ? trigger.energy + "/5" : "—") +
+          (trigger.soreness !== null ? ", soreness " + trigger.soreness + "/5" : "") +
+          (trigger.avg !== null ? " (7-day average " + trigger.avg.toFixed(1) + "/5)" : "") + ".";
+      } else {
+        head = "Your readiness check-ins average " + trigger.avg.toFixed(1) + "/5 over the last 7 days, with no entry for today yet.";
+      }
+      return head + " " + e.sess.title + (e.sess.sport === "strength" ? " is a strength session" : " is a hard session") +
+        ", so it moves to " + toDay + " — same work, one day later, loads and volume unchanged.";
+    };
+    const readinessSource = trigger.basis === "today"
+      ? "Your readiness check-in on " + trigger.date + " — your own rating, not a measured physiological value."
+      : "Your own readiness check-ins from the last 7 days — a self-rating, not a measured physiological value.";
+
+    // 1) Readiness move first: today's hard session off a low-readiness day.
+    if (trigger.active) {
+      pending.forEach(function (e) {
+        if (!(e.effIdx === bounds.todayIdx && isHardSession(e.sess))) return;
+        const pick = pickOpenDay(bounds.todayIdx + 1, e.sess, occupied);
+        if (pick.index < 0) { occupied[bounds.todayIdx] = e.sess; return; } // no slot: stays put, no change claimed
+        occupied[pick.index] = e.sess;
+        moves[e.sess.id] = padDay(pick.index);
+        changes.push({
+          planId: e.sess.id,
+          title: e.sess.title,
+          sport: e.sess.sport,
+          kind: "move",
+          trigger: "readiness",
+          fromDay: e.effDay,
+          toDay: padDay(pick.index),
+          text: e.sess.title + ": " + e.effDay + " → " + padDay(pick.index),
+          why: readinessWhy(e, padDay(pick.index)),
+          source: readinessSource
+        });
+      });
+    }
+
+    // 2) Missed sessions, earliest planned day first, onto open days.
+    missed.sort(function (a, b) { return a.effIdx - b.effIdx; });
+    missed.forEach(function (e) {
+      const earliest = trigger.active ? bounds.todayIdx + 1 : bounds.todayIdx;
+      const pick = pickOpenDay(earliest, e.sess, occupied);
+      const missWhy = function (toDay, spacingNote) {
+        return e.sess.title + " was planned for " + e.effDay + " and has no matching session in your log this week (" +
+          logThisWeek + (logThisWeek === 1 ? " session" : " sessions") + " logged). The earliest open training day left is " + toDay + "." +
+          (spacingNote ? " " + spacingNote : "");
+      };
+      if (pick.index < 0) {
+        dropped.push(e.sess.id);
+        changes.push({
+          planId: e.sess.id,
+          title: e.sess.title,
+          sport: e.sess.sport,
+          kind: "defer",
+          trigger: "missed",
+          fromDay: e.effDay,
+          toDay: null,
+          text: e.sess.title + ": " + e.effDay + " → deferred",
+          why: e.sess.title + " was planned for " + e.effDay + " with no session logged, and every remaining day this week is already full — there is no open day to move it into. It drops out of this week only; next week's template runs as generated.",
+          source: missedSource
+        });
+        return;
+      }
+      occupied[pick.index] = e.sess;
+      moves[e.sess.id] = padDay(pick.index);
+      const spacingNote = pick.skippedDay
+        ? "Chose " + padDay(pick.index) + " over " + pick.skippedDay + " so strength days don't stack back-to-back."
+        : "";
+      changes.push({
+        planId: e.sess.id,
+        title: e.sess.title,
+        sport: e.sess.sport,
+        kind: "move",
+        trigger: "missed",
+        fromDay: e.effDay,
+        toDay: padDay(pick.index),
+        text: e.sess.title + ": " + e.effDay + " → " + padDay(pick.index),
+        why: missWhy(padDay(pick.index), spacingNote),
+        source: missedSource
+      });
+    });
+
+    // Human summary — one line, honest about what happened.
+    const readLn = changes.filter(function (c) { return c.trigger === "readiness" && c.kind === "move"; }).length;
+    const missLn = changes.filter(function (c) { return c.trigger === "missed" && c.kind === "move"; }).length;
+    const defLn = changes.filter(function (c) { return c.kind === "defer"; }).length;
+    const bits = [];
+    if (readLn) bits.push(readLn + (readLn === 1 ? " session shifted" : " sessions shifted") + " for low readiness");
+    if (missLn) bits.push(missLn + (missLn === 1 ? " missed session" : " missed sessions") + " moved to open days");
+    if (defLn) bits.push(defLn + (defLn === 1 ? " session" : " sessions") + " deferred — no open day left");
+    base.summary = bits.length ? "This week adjusted: " + bits.join("; ") + "." : "No changes needed — this week is on track.";
+    return base;
+  }

@@ -1,0 +1,15 @@
+  function latestTopSetLoad(profile, name) {
+    const state = Store.get();
+    let best = null;
+    (state.log || []).filter(function (s) { return s.sport === "strength"; })
+      .sort(function (a, b) { return a.startedAt < b.startedAt ? 1 : -1; })
+      .some(function (s) {
+        const ex = (s.exercises || []).find(function (e) { return e.name === name; });
+        if (ex && ex.sets && ex.sets.length) {
+          const top = ex.sets.reduce(function (m, st) { return (st.load || 0) > (m.load || 0) ? st : m; }, ex.sets[0]);
+          if (top.load && top.load > 0) best = top.load;
+        }
+        return best != null;
+      });
+    return best;
+  }

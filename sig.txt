@@ -1,0 +1,3 @@
+  function sportsInGroup(group) {
+    return SPORTS.filter(function (s) { return s.group === group; });
+  }

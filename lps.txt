@@ -1,0 +1,8 @@
+  function loadProfileSet(profile, name, entry) {
+    if (typeof Store !== "object") return;
+    Store.set(function (s) {
+      if (!s.profile) s.profile = {};
+      if (!s.profile.loadProfile) s.profile.loadProfile = {};
+      s.profile.loadProfile[name] = Object.assign({}, entry, { updatedAt: new Date().toISOString() });
+    });
+  }

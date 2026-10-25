@@ -1,0 +1,4 @@
+  function loadProfileForExercise(profile, name) {
+    const lp = (profile && profile.loadProfile) || {};
+    return lp[name] || null;
+  }

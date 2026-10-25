@@ -1,0 +1,9 @@
+  function suggestedLoadForExercise(profile, name) {
+    const lp = loadProfileForExercise(profile, name);
+    const top = latestTopSetLoad(profile, name);
+    const base = lp && lp.loadKg != null ? lp.loadKg : (top != null ? top : null);
+    if (base == null) return null;
+    // Small progression unless the user's profile says the lift is stalled.
+    if (lp && lp.stalled) return base;
+    return Math.round(base * 1.025);
+  }

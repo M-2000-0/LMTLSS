@@ -1,0 +1,9 @@
+  function activityMetrics(activity, unit) {
+    if (!activity || !activity.sport) return [];
+    const out = [];
+    metricDefs(activity.sport).forEach(function (def) {
+      const value = formatMetric(def.key, activity, unit);
+      if (value !== null) out.push({ key: def.key, label: def.label, value: value });
+    });
+    return out;
+  }

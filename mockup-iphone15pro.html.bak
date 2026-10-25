@@ -1,0 +1,297 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>LMTLSS — iPhone 15 Pro mockup</title>
+<style>
+  :root {
+    --accent: #61EB1A;
+    --surface: #111111;
+    --border: #262626;
+  }
+  * { box-sizing: border-box; }
+  html, body { margin: 0; background: #000; }
+  body {
+    font-family: -apple-system, BlinkMacSystemFont, "SF Pro Text", "Segoe UI", Roboto, sans-serif;
+    color: #f5f5f7;
+    padding: 40px 24px 64px;
+  }
+  header { max-width: 1120px; margin: 0 auto 40px; }
+  .wordmark {
+    font-size: 22px; font-weight: 800; letter-spacing: 0.08em; margin: 0 0 10px;
+  }
+  .wordmark span { color: var(--accent); }
+  h1 {
+    font-size: 34px; line-height: 1.08; letter-spacing: -0.03em;
+    margin: 0 0 12px; font-weight: 800;
+  }
+  .sub { color: #8e8e93; font-size: 15px; line-height: 1.5; margin: 0; max-width: 680px; }
+  .sub strong { color: #d1d1d6; font-weight: 600; }
+
+  .gallery {
+    max-width: 1120px; margin: 0 auto;
+    display: grid; grid-template-columns: repeat(2, 393px);
+    gap: 64px 72px; justify-content: center;
+  }
+  @media (max-width: 980px) {
+    .gallery { grid-template-columns: 393px; gap: 56px; }
+  }
+  figure { margin: 0; }
+  figcaption {
+    margin-top: 18px; font-size: 13px; letter-spacing: 0.14em;
+    text-transform: uppercase; color: #8e8e93; text-align: center;
+  }
+  figcaption b { color: #f5f5f7; font-weight: 700; }
+
+  /* ---------- iPhone 15 Pro frame ---------- */
+  .device {
+    position: relative;
+    width: 417px; height: 876px;   /* 393×852 screen + 12px titanium band */
+    padding: 12px;
+    border-radius: 66px;
+    background: linear-gradient(145deg, #6e6e73 0%, #3a3a3c 22%, #1c1c1e 58%, #48484a 100%);
+    box-shadow:
+      0 0 0 1px rgba(255,255,255,0.10),
+      0 30px 70px rgba(0,0,0,0.75),
+      inset 0 0 0 1px rgba(0,0,0,0.6);
+  }
+  .screen {
+    position: relative;
+    width: 393px; height: 852px;
+    border-radius: 54px;
+    overflow: hidden;
+    background: #000;
+  }
+  .screen iframe {
+    display: block; width: 393px; height: 852px; border: 0; background: #000;
+  }
+
+  /* Dynamic Island */
+  .island {
+    position: absolute; top: 11px; left: 50%; transform: translateX(-50%);
+    width: 125px; height: 36px; border-radius: 20px;
+    background: #000; z-index: 6; pointer-events: none;
+    box-shadow: 0 0 0 0.5px rgba(255,255,255,0.06);
+  }
+  .island::after {
+    content: ""; position: absolute; right: 13px; top: 50%;
+    transform: translateY(-50%);
+    width: 10px; height: 10px; border-radius: 50%;
+    background: radial-gradient(circle at 35% 35%, #1b2733, #05070a 70%);
+  }
+  /* Status bar (sits beside the Dynamic Island, like iOS) */
+  .statusbar {
+    position: absolute; top: 0; left: 0; right: 0; height: 54px;
+    display: flex; align-items: center; justify-content: space-between;
+    padding: 6px 30px 0; z-index: 5; pointer-events: none;
+    font-size: 15px; font-weight: 600; letter-spacing: 0.01em; color: #fff;
+  }
+  .sb-icons { display: flex; align-items: center; gap: 6px; }
+  .sb-icons svg { display: block; }
+
+  /* Home indicator */
+  .home-bar {
+    position: absolute; bottom: 8px; left: 50%; transform: translateX(-50%);
+    width: 140px; height: 5px; border-radius: 3px;
+    background: rgba(255,255,255,0.85); z-index: 6; pointer-events: none;
+  }
+
+  /* Hardware buttons */
+  .btn-side {
+    position: absolute; border-radius: 3px;
+    background: linear-gradient(90deg, #2b2b2e, #48484a);
+  }
+  .btn-action { left: -3px; top: 152px; width: 4px; height: 32px; }
+  .btn-vol-up { left: -3px; top: 214px; width: 4px; height: 58px; }
+  .btn-vol-dn { left: -3px; top: 286px; width: 4px; height: 58px; }
+  .btn-power { right: -3px; top: 232px; width: 4px; height: 96px; }
+
+  footer {
+    max-width: 1120px; margin: 56px auto 0; color: #6e6e73;
+    font-size: 13px; line-height: 1.6; border-top: 1px solid var(--border); padding-top: 20px;
+  }
+  footer code { color: #8e8e93; }
+</style>
+</head>
+<body>
+
+<header>
+  <p class="wordmark">LMTLSS<span>.</span></p>
+  <h1>iPhone 15 Pro — screen mockup</h1>
+  <p class="sub">
+    The real LMTLSS screens rendered at the iPhone 15 Pro logical size
+    (<strong>393 × 852 pt</strong>) inside a device frame, with Dynamic Island and
+    home-indicator insets shown. Data is the clearly-labeled demo dataset.
+  </p>
+</header>
+
+<div class="gallery" id="gallery">
+  <figure>
+    <div class="device">
+      <span class="btn-side btn-action"></span><span class="btn-side btn-vol-up"></span>
+      <span class="btn-side btn-vol-dn"></span><span class="btn-side btn-power"></span>
+      <div class="screen">
+        <iframe data-tab="home" title="Home screen on iPhone 15 Pro" src="index.html"></iframe>
+        <span class="island"></span><span class="home-bar"></span>
+      </div>
+    </div>
+    <figcaption><b>Home</b> — today, plan, readiness</figcaption>
+  </figure>
+
+  <figure>
+    <div class="device">
+      <span class="btn-side btn-action"></span><span class="btn-side btn-vol-up"></span>
+      <span class="btn-side btn-vol-dn"></span><span class="btn-side btn-power"></span>
+      <div class="screen">
+        <iframe data-tab="train" title="Train screen on iPhone 15 Pro" src="index.html"></iframe>
+        <span class="island"></span><span class="home-bar"></span>
+      </div>
+    </div>
+    <figcaption><b>Train</b> — this week's sessions</figcaption>
+  </figure>
+
+  <figure>
+    <div class="device">
+      <span class="btn-side btn-action"></span><span class="btn-side btn-vol-up"></span>
+      <span class="btn-side btn-vol-dn"></span><span class="btn-side btn-power"></span>
+      <div class="screen">
+        <iframe data-tab="recover" title="Recover screen on iPhone 15 Pro" src="index.html"></iframe>
+        <span class="island"></span><span class="home-bar"></span>
+      </div>
+    </div>
+    <figcaption><b>Recover</b> — readiness + rest guidance</figcaption>
+  </figure>
+
+  <figure>
+    <div class="device">
+      <span class="btn-side btn-action"></span><span class="btn-side btn-vol-up"></span>
+      <span class="btn-side btn-vol-dn"></span><span class="btn-side btn-power"></span>
+      <div class="screen">
+        <iframe data-tab="progress" title="Progress screen on iPhone 15 Pro" src="index.html"></iframe>
+        <span class="island"></span><span class="home-bar"></span>
+      </div>
+    </div>
+    <figcaption><b>Progress</b> — records, trends, history</figcaption>
+  </figure>
+
+  <figure>
+    <div class="device">
+      <span class="btn-side btn-action"></span><span class="btn-side btn-vol-up"></span>
+      <span class="btn-side btn-vol-dn"></span><span class="btn-side btn-power"></span>
+      <div class="screen">
+        <iframe data-tab="fuel" title="Fuel screen on iPhone 15 Pro" src="index.html"></iframe>
+        <span class="island"></span><span class="home-bar"></span>
+      </div>
+    </div>
+    <figcaption><b>Fuel</b> — hydration + meal estimates</figcaption>
+  </figure>
+
+  <figure>
+    <div class="device">
+      <span class="btn-side btn-action"></span><span class="btn-side btn-vol-up"></span>
+      <span class="btn-side btn-vol-dn"></span><span class="btn-side btn-power"></span>
+      <div class="screen">
+        <iframe data-tab="coach" title="Coach screen on iPhone 15 Pro" src="index.html"></iframe>
+        <span class="island"></span><span class="home-bar"></span>
+      </div>
+    </div>
+    <figcaption><b>Coach</b> — why, with your data</figcaption>
+  </figure>
+</div>
+
+<footer>
+  Screens are the live app, not redrawn artwork — each frame loads <code>index.html</code>
+  at 393 × 852 and switches tab programmatically. Demo data comes from
+  <code>Store.seedDemo()</code> and is labeled in-app as seeded. This mockup previews the
+  reference UI at iPhone dimensions; it is not the Expo/React Native build.
+</footer>
+
+<script>
+(function () {
+  "use strict";
+  var frames = Array.prototype.slice.call(document.querySelectorAll("iframe"));
+  var bootstrapped = false;
+
+  var STATUS_SVG =
+    '<svg width="18" height="12" viewBox="0 0 18 12" fill="#fff" aria-hidden="true">' +
+      '<rect x="0" y="7.5" width="3" height="4.5" rx="1"/>' +
+      '<rect x="5" y="5" width="3" height="7" rx="1"/>' +
+      '<rect x="10" y="2.5" width="3" height="9.5" rx="1"/>' +
+      '<rect x="15" y="0" width="3" height="12" rx="1"/>' +
+    '</svg>' +
+    '<svg width="17" height="12" viewBox="0 0 17 12" fill="#fff" aria-hidden="true">' +
+      '<path d="M8.5 11.2 6.2 8.7a3.4 3.4 0 0 1 4.6 0z"/>' +
+      '<path d="M8.5 5.2c-1.9 0-3.6.7-4.9 1.9l-1.6-1.7A9.6 9.6 0 0 1 8.5 2.8c2.5 0 4.8.9 6.5 2.6l-1.6 1.7a6.9 6.9 0 0 0-4.9-1.9z"/>' +
+      '<path d="M8.5 1.4e-7C5.1 0 2 1.2-.3 3.2l1.7 1.7A11.5 11.5 0 0 1 8.5 2.2c2.7 0 5.2 1 7.1 2.7l1.7-1.7C15 1.2 11.9 1.4e-7 8.5 1.4e-7z"/>' +
+    '</svg>' +
+    '<svg width="25" height="12" viewBox="0 0 25 12" aria-hidden="true">' +
+      '<rect x="0.5" y="0.5" width="20" height="11" rx="3.2" fill="none" stroke="#fff" stroke-opacity="0.45"/>' +
+      '<rect x="2" y="2" width="14" height="8" rx="2" fill="#fff"/>' +
+      '<path d="M22.5 4.2v3.6c1.1-.4 1.6-1 1.6-1.8s-.5-1.4-1.6-1.8z" fill="#fff" fill-opacity="0.5"/>' +
+    '</svg>';
+
+  function addStatusBar(screen) {
+    if (!screen || screen.querySelector(".statusbar")) return;
+    var bar = document.createElement("div");
+    bar.className = "statusbar";
+    bar.innerHTML = '<span class="sb-time">9:41</span><span class="sb-icons">' + STATUS_SVG + "</span>";
+    screen.appendChild(bar);
+  }
+
+  /* iPhone-like insets inside the frame: clear the status bar / island and
+     hide scrollbars so the page reads as an app, not a web page. */
+  function dress(w) {
+    var d = w.document;
+    if (!d || d.getElementById("lmtlss-mock-css")) return;
+    var style = d.createElement("style");
+    style.id = "lmtlss-mock-css";
+    style.textContent =
+      "html,body,*{scrollbar-width:none!important;-ms-overflow-style:none!important}" +
+      "::-webkit-scrollbar{width:0!important;height:0!important;display:none!important}" +
+      ".main{padding-top:62px!important}" +
+      ".bottom-nav{padding-bottom:16px!important}";
+    (d.head || d.documentElement).appendChild(style);
+  }
+
+  function show(f) {
+    var w = f.contentWindow;
+    if (!w || !w.Store || !w.App) return;
+    var nav = w.document.getElementById("bottom-nav");
+    if (nav) nav.style.display = "";
+    dress(w);
+    if (w.App && w.App.go) w.App.go(f.getAttribute("data-tab") || "home");
+  }
+
+  function reloadAll() {
+    frames.forEach(function (f) {
+      try { f.contentWindow.location.reload(); } catch (err) { /* ignore */ }
+    });
+  }
+
+  Array.prototype.forEach.call(document.querySelectorAll(".screen"), addStatusBar);
+
+  frames.forEach(function (f) {
+    f.addEventListener("load", function () {
+      try {
+        var w = f.contentWindow;
+        if (!w || !w.Store) return;
+        if (!bootstrapped) {
+          bootstrapped = true;
+          // Only ever seed an empty install — never overwrite real local data.
+          if (!w.Store.get().profile) w.Store.seedDemo();
+          // Frames boot concurrently and each caches its own state object, so
+          // reload once to let every frame read the single persisted dataset.
+          setTimeout(reloadAll, 80);
+          return;
+        }
+        show(f);
+      } catch (err) {
+        /* cross-origin or not ready — leave the frame as-is */
+      }
+    });
+  });
+})();
+</script>
+</body>
+</html>

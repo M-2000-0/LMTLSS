@@ -1,0 +1,9 @@
+  function integrityFlagForSet(set, exerciseName) {
+    if (!set || set.done === false) return null;
+    const load = set.load || 0;
+    const reps = set.reps != null ? set.reps : 0;
+    if (load <= 0 || reps <= 0) return "review";
+    if (reps > 60) return "review";
+    if (load > 999) return "review";
+    return "ok";
+  }

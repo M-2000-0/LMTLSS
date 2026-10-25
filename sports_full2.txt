@@ -1,0 +1,16 @@
+  const SPORTS = [
+    { id: "running", label: "Running", group: "endurance", metrics: ["durationSec", "distanceM", "pace", "elevationM", "effort"], depth: "full" },
+    { id: "cycling", label: "Cycling", group: "endurance", metrics: ["durationSec", "distanceM", "speed", "elevationM", "effort"], depth: "light" },
+    { id: "swimming", label: "Swimming", group: "endurance", metrics: ["durationSec", "distanceM", "pace", "strokeStyle", "effort"], depth: "light" },
+    { id: "strength", label: "Strength", group: "strength", metrics: ["durationSec", "sets", "reps", "loadKg", "effort"], depth: "full" },
+    { id: "boxing", label: "Boxing", group: "combat", metrics: ["durationSec", "rounds", "roundDurationSec", "result", "effort"], depth: "light" },
+    { id: "mma", label: "MMA", group: "combat", metrics: ["durationSec", "rounds", "roundDurationSec", "result", "effort"], depth: "light" },
+    { id: "taekwondo", label: "Taekwondo", group: "combat", metrics: ["durationSec", "rounds", "roundDurationSec", "score", "result"], depth: "light" },
+    { id: "martial-arts", label: "Martial arts", group: "combat", metrics: ["durationSec", "rounds", "score", "effort"], depth: "light" },
+    { id: "tennis", label: "Tennis", group: "racket", metrics: ["durationSec", "setsWon", "score", "opponent", "effort"], depth: "light" },
+    { id: "pickleball", label: "Pickleball", group: "racket", metrics: ["durationSec", "setsWon", "score", "opponent", "effort"], depth: "light" },
+    { id: "golf", label: "Golf", group: "precision", metrics: ["durationSec", "holes", "strokes", "score", "effort"], depth: "light" },
+    { id: "archery", label: "Archery", group: "precision", metrics: ["durationSec", "arrows", "score", "effort"], depth: "light" },
+    { id: "team-sports", label: "Team sports", group: "team", metrics: ["durationSec", "score", "result", "effort"], depth: "light" },
+    { id: "other", label: "Other", group: "other", metrics: ["durationSec", "score", "effort"], depth: "light" }
+  ];

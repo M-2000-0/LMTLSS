@@ -1,0 +1,87 @@
+const SPORTS = [
+    { id: "running", label: "Running", group: "endurance", metrics: ["durationSec", "distanceM", "pace", "elevationM", "effort"], depth: "full" },
+    { id: "cycling", label: "Cycling", group: "endurance", metrics: ["durationSec", "distanceM", "speed", "elevationM", "effort"], depth: "light" },
+    { id: "swimming", label: "Swimming", group: "endurance", metrics: ["durationSec", "distanceM", "pace", "strokeStyle", "effort"], depth: "light" },
+    { id: "strength", label: "Strength", group: "strength", metrics: ["durationSec", "sets", "reps", "loadKg", "effort"], depth: "full" },
+    { id: "boxing", label: "Boxing", group: "combat", metrics: ["durationSec", "rounds", "roundDurationSec", "result", "effort"], depth: "light" },
+    { id: "mma", label: "MMA", group: "combat", metrics: ["durationSec", "rounds", "roundDurationSec", "result", "effort"], depth: "light" },
+    { id: "taekwondo", label: "Taekwondo", group: "combat", metrics: ["durationSec", "rounds", "roundDurationSec", "score", "result"], depth: "light" },
+    { id: "martial-arts", label: "Martial arts", group: "combat", metrics: ["durationSec", "rounds", "score", "effort"], depth: "light" },
+    { id: "tennis", label: "Tennis", group: "racket", metrics: ["durationSec", "setsWon", "score", "opponent", "effort"], depth: "light" },
+    { id: "pickleball", label: "Pickleball", group: "racket", metrics: ["durationSec", "setsWon", "score", "opponent", "effort"], depth: "light" },
+    { id: "golf", label: "Golf", group: "precision", metrics: ["durationSec", "holes", "strokes", "score", "effort"], depth: "light" },
+    { id: "archery", label: "Archery", group: "precision", metrics: ["durationSec", "arrows", "score", "effort"], depth: "light" },
+    { id: "team-sports", label: "Team sports", group: "team", metrics: ["durationSec", "score", "result", "effort"], depth: "light" },
+    { id: "other", label: "Other", group: "other", metrics: ["durationSec", "score", "effort"], depth: "light" }
+  ];
+
+  function sportById(id) {
+    return SPORTS.find(function (s) { return s.id === id; }) || null;
+  }
+
+  // How much of a sport is actually built in this version. Used by UI to label
+  // "full workflow" vs "recorded only" honestly, and by planFor to know what to
+  // promise in a weekly plan.
+  function depthOfSport(sportId) {
+    const s = sportById(sportId);
+    return s && s.depth ? s.depth : "light";
+  }
+
+  function sportsInGroup(group) {
+    return SPORTS.filter(function (s) { return s.group === group; });
+  }
+
+  /* Metric definitions for a sport, in display order. Unknown sport = []. */
+  function metricDefs(sportId) {
+    const sport = sportById(sportId);
+    if (!sport) return [];
+    return sport.metrics.map(function (key) {
+      return { key: key, label: METRICS[key].label, kind: METRICS[key].kind };
+    });
+  }
+
+  /* Format one metric for display. Returns null when the activity has no value
+     for it — callers render nothing rather than a placeholder number. */
+  function formatMetric(key, activity, unit) {
+    const def = METRICS[key];
+    if (!def || !activity) return null;
+    if (key === "pace") {
+      if (!activity.distanceM || !activity.durationSec) return null;
+      return fmtPace(activity.durationSec / (activity.distanceM / 1000));
+    }
+    if (key === "speed") {
+      if (!activity.distanceM || !activity.durationSec) return null;
+      return ((activity.distanceM / 1000) / (activity.durationSec / 3600)).toFixed(1) + " km/h";
+    }
+    const v = activity[key];
+    if (v === null || v === undefined || v === "") return null;
+    switch (def.kind) {
+      case "duration": return typeof v === "number" ? fmtDur(v) : null;
+      case "distance": return typeof v === "number" ? fmtDist(v, unit) : null;
+      case "height": return typeof v === "number" ? Math.round(v) + " m" : null;
+      case "weight": return typeof v === "number" ? v + " kg" : null;
+      case "count": return typeof v === "number" ? String(v) : null;
+      case "effort": return typeof v === "number" ? v + "/10" : null;
+      default: return String(v);
+    }
+  }
+
+  /* The metrics an activity actually has, ready to render. Only metrics the
+     sport supports are considered, so a run never shows "rounds". */
+  function activityMetrics(activity, unit) {
+    if (!activity || !activity.sport) return [];
+    const out = [];
+    metricDefs(activity.sport).forEach(function (def) {
+      const value = formatMetric(def.key, activity, unit);
+      if (value !== null) out.push({ key: def.key, label: def.label, value: value });
+    });
+    return out;
+  }
+
+  /* Shape validation for an activity the app is about to store. Rejects
+     nonsense (negative durations, fractional reps, unknown sport) but never
+     invents missing values — absent metrics stay absent. */
+  function validateActivity(activity) {
+    const errors = [];
+    if (!activity || typeof activity !== "object") {
+      return { ok: false, errors: [{ field: null, message: "Activity must be an object." }] };

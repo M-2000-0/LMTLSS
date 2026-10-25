@@ -1,0 +1,11 @@
+  function rationaleFor(profile, strengthDays, runDays, extraSportDays) {
+    const bits = [];
+    bits.push("Built from your goal (" + (GOAL_LABELS[profile.goal] || "general fitness") + "), " +
+      (EXPERIENCE_LABELS[profile.experience] || "beginner") + " experience, and " +
+      (profile.daysPerWeek || 4) + " training days per week.");
+    if (strengthDays) bits.push(strengthDays + " strength day" + (strengthDays > 1 ? "s" : "") + " with push/pull/full-body rotation so each muscle recovers between sessions.");
+    if (runDays) bits.push(runDays + " run" + (runDays > 1 ? "s" : "") + ": mostly easy aerobic work plus one longer run, the standard base-building split.");
+    if (extraSportDays) bits.push(extraSportDays + " other-sport day" + (extraSportDays > 1 ? "s" : "") + " kept on the weekly plan so your schedule reflects your sport mix; the sport-specific workouts for those are recorded, not yet fully built out.");
+    bits.push("Starting volumes are deliberately conservative — the plan increases only from your logged performance.");
+    return bits;
+  }

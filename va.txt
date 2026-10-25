@@ -1,0 +1,38 @@
+  function validateActivity(activity) {
+    const errors = [];
+    if (!activity || typeof activity !== "object") {
+      return { ok: false, errors: [{ field: null, message: "Activity must be an object." }] };
+    }
+    const sport = sportById(activity.sport);
+    if (!sport) return { ok: false, errors: [{ field: "sport", message: "Unknown sport." }] };
+    const allowed = sport.metrics;
+    const limits = {
+      durationSec: 86400, distanceM: 1000000, elevationM: 10000, sets: 100, reps: 1000,
+      loadKg: 1000, rounds: 100, roundDurationSec: 3600, setsWon: 20, holes: 36,
+      strokes: 300, arrows: 1000, effort: 10
+    };
+    const whole = ["sets", "reps", "rounds", "setsWon", "holes", "strokes", "arrows"];
+    Object.keys(activity).forEach(function (key) {
+      if (allowed.indexOf(key) < 0) return;       // not a metric this sport records
+      if (!METRICS[key]) return;
+      const v = activity[key];
+      if (v === null || v === undefined) return;   // absent is fine, never invented
+      if (limits[key] !== undefined) {
+        if (typeof v !== "number" || isNaN(v)) { errors.push({ field: key, message: METRICS[key].label + " must be a number." }); return; }
+        if (v < 0) { errors.push({ field: key, message: METRICS[key].label + " cannot be negative." }); return; }
+        if (v > limits[key]) { errors.push({ field: key, message: METRICS[key].label + " exceeds a plausible maximum." }); return; }
+        if (whole.indexOf(key) >= 0 && Math.round(v) !== v) {
+          errors.push({ field: key, message: METRICS[key].label + " must be a whole number." });
+        }
+        return;
+      }
+      if (typeof v !== "number" && typeof v !== "string") {
+        errors.push({ field: key, message: METRICS[key].label + " must be text." });
+        return;
+      }
+      if (typeof v === "string" && v.length > 200) {
+        errors.push({ field: key, message: METRICS[key].label + " is too long." });
+      }
+    });
+    return { ok: errors.length === 0, errors: errors };
+  }

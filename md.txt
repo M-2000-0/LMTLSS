@@ -1,0 +1,7 @@
+  function metricDefs(sportId) {
+    const sport = sportById(sportId);
+    if (!sport) return [];
+    return sport.metrics.map(function (key) {
+      return { key: key, label: METRICS[key].label, kind: METRICS[key].kind };
+    });
+  }

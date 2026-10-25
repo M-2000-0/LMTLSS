@@ -1,0 +1,17 @@
+  function integritySummaryForSession(session) {
+    if (!session || session.sport !== "strength") return null;
+    const reasons = [];
+    let reviewed = 0, flagged = 0;
+    (session.exercises || []).forEach(function (ex) {
+      (ex.sets || []).forEach(function (st) {
+        if (st.done === false) return;
+        reviewed++;
+        const flag = integrityFlagForSet(st, ex.name);
+        if (flag && flag !== "ok") {
+          flagged++;
+          reasons.push(ex.name + ": " + flag);
+        }
+      });
+    });
+    return { reviewedCount: reviewed, flaggedCount: flagged, flagReasons: reasons };
+  }
