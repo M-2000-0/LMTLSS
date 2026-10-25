@@ -1,0 +1,47 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover" />
+<meta name="theme-color" content="#000000" />
+<title>Shop — LMTLSS</title>
+<link rel="icon" type="image/png" href="logo/lmtlss-favicon-48.png" />
+<link rel="apple-touch-icon" href="logo/lmtlss-icon-1024.png" />
+<link rel="stylesheet" href="css/tokens.css" />
+<link rel="stylesheet" href="css/app.css" />
+<style>
+  .shop-page { min-height: 100vh; background: var(--bg); }
+  .shop-nav { border-bottom: 1px solid var(--border); padding: 0 24px; }
+  .shop-nav-inner { max-width: 1100px; margin: 0 auto; display: flex; align-items: center; justify-content: space-between; height: 64px; }
+  .shop-brand { display: flex; align-items: center; gap: 10px; text-decoration: none; color: var(--text); }
+  .shop-brand img { width: 40px; height: 40px; }
+  .shop-brand-text { font-weight: 700; font-size: 18px; }
+  .shop-hero { text-align: center; padding: 120px 24px 80px; max-width: 600px; margin: 0 auto; }
+  .shop-title { font-size: clamp(2.5rem, 6vw, 4rem); font-weight: 800; letter-spacing: -0.03em; margin: 0 0 16px; }
+  .shop-subtitle { font-size: 18px; color: var(--text-secondary); margin: 0 0 32px; line-height: 1.7; }
+  .shop-badge { display: inline-block; background: var(--accent); color: var(--bg); padding: 8px 20px; border-radius: var(--r-pill); font-weight: 700; font-size: 14px; letter-spacing: 0.05em; text-transform: uppercase; }
+  .shop-footer { text-align: center; padding: 40px 24px; border-top: 1px solid var(--border); color: var(--text-muted); }
+</style>
+</head>
+<body>
+  <div class="shop-page">
+    <nav class="shop-nav">
+      <div class="shop-nav-inner">
+        <a href="index.html" class="shop-brand">
+          <img src="logo/image-removebg-preview.png" alt="LMTLSS" />
+          <span class="shop-brand-text">LMTLSS</span>
+        </a>
+        <a href="index.html" style="color: var(--accent); text-decoration: none; font-weight: 600;">? Back to Home</a>
+      </div>
+    </nav>
+    <section class="shop-hero">
+      <span class="shop-badge">Coming Soon</span>
+      <h1 class="shop-title">LMTLSS Shop</h1>
+      <p class="shop-subtitle">Premium apparel and gear for athletes who live the lifestyle. Built with the same attention to detail as everything we create.</p>
+    </section>
+    <footer class="shop-footer">
+      <p>© 2026 LMTLSS. All rights reserved.</p>
+    </footer>
+  </div>
+</body>
+</html>

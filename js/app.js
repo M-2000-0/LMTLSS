@@ -350,10 +350,11 @@
             el("span", { style: "font-weight:700;margin-left:10px;font-size:16px" }, ["LMTLSS"])
           ]),
           el("div", { class: "landing-footer-links" }, [
-            el("a", { href: "download.html", text: "Download" }),
-            el("a", { href: "index.html", text: "Web App" }),
-            el("a", { href: "#", text: "Privacy" }),
-            el("a", { href: "#", text: "Terms" })
+          el("a", { href: "download.html", text: "Download" }),
+          el("a", { href: "shop.html", text: "Shop" }),
+          el("a", { href: "index.html", text: "Web App" }),
+          el("a", { href: "#", text: "Privacy" }),
+          el("a", { href: "#", text: "Terms" })
           ]),
           el("p", { class: "landing-footer-copy" }, ["© 2026 LMTLSS. All rights reserved."])
         ])
