@@ -70,6 +70,12 @@ a { color: var(--accent); }
     animation-iteration-count: 1 !important;
     transition-duration: 0.01ms !important;
   }
+  .landing-phone {
+    transform: none !important;
+  }
+  html {
+    scroll-behavior: auto;
+  }
 }
 
 /* ---------- Layout ---------- */
@@ -887,11 +893,44 @@ textarea.input { min-height: 80px; resize: vertical; }
   transition: color var(--t-fast) var(--ease);
 }
 
-.landing-nav-links a:hover {
+.landing-nav-menu {
+  display: none;
+  background: transparent;
   color: var(--text);
+  border: 1px solid var(--border);
+  padding: 6px 12px;
+  border-radius: var(--r-sm);
+  font-size: 18px;
+  cursor: pointer;
 }
 
-.landing-cta-nav {
+.landing-mobile-menu {
+  display: none;
+  flex-direction: column;
+  background: rgba(0, 0, 0, 0.98);
+  border-bottom: 1px solid var(--border);
+  padding: 12px 24px;
+  gap: 12px;
+}
+
+.landing-mobile-menu a {
+  color: var(--text-secondary);
+  text-decoration: none;
+  font-size: 15px;
+  padding: 8px 0;
+}
+
+.landing-mobile-menu button {
+  background: var(--accent);
+  color: var(--bg);
+  border: none;
+  padding: 10px 16px;
+  border-radius: var(--r-sm);
+  font-weight: 600;
+  font-size: 15px;
+  cursor: pointer;
+  margin-top: 8px;
+}
   background: var(--accent);
   color: var(--bg);
   border: none;
@@ -1196,6 +1235,9 @@ textarea.input { min-height: 80px; resize: vertical; }
   }
   .landing-nav-links {
     display: none;
+  }
+  .landing-nav-menu {
+    display: block;
   }
 }
 
