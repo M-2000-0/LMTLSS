@@ -1,0 +1,97 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover" />
+<meta name="theme-color" content="#000000" />
+<meta name="description" content="Download LMTLSS app for iOS and Android" />
+<title>Download LMTLSS - iOS &amp; Android</title>
+<link rel="icon" type="image/png" href="logo/lmtlss-favicon-48.png" />
+<link rel="apple-touch-icon" href="logo/lmtlss-icon-1024.png" />
+<link rel="stylesheet" href="css/tokens.css" />
+<link rel="stylesheet" href="css/app.css" />
+<style>
+  .download-hero { text-align: center; padding: 48px 24px 32px; }
+  .download-logo { width: 96px; height: 96px; margin: 0 auto 16px; display: block; }
+  .download-title { font-size: 32px; font-weight: 700; color: var(--text); margin: 0 0 8px; }
+  .download-subtitle { color: var(--text-secondary); margin: 0 0 32px; font-size: 16px; }
+  .download-cards { display: flex; flex-direction: column; gap: 16px; max-width: 400px; margin: 0 auto 32px; padding: 0 24px; }
+  .download-card { background: var(--surface); border: 1px solid var(--border); border-radius: 12px; padding: 24px; text-align: left; }
+  .download-card-header { display: flex; align-items: center; gap: 12px; margin-bottom: 12px; }
+  .download-card-icon { font-size: 32px; }
+  .download-card-title { font-size: 20px; font-weight: 600; color: var(--text); margin: 0; }
+  .download-card-desc { color: var(--text-secondary); margin: 0 0 16px; font-size: 14px; }
+  .download-button { display: block; width: 100%; background: var(--accent); color: var(--bg); text-decoration: none; padding: 12px 24px; border-radius: 8px; font-weight: 600; text-align: center; box-sizing: border-box; }
+  .download-button.secondary { background: var(--surface-elevated); color: var(--text); border: 1px solid var(--border); }
+  .download-button:hover { opacity: 0.9; }
+  .download-instructions { max-width: 400px; margin: 0 auto; padding: 0 24px 48px; color: var(--text-secondary); font-size: 13px; line-height: 1.6; }
+  .download-instructions h3 { color: var(--text); font-size: 16px; margin: 24px 0 12px; }
+  .download-instructions ol { margin: 0; padding-left: 20px; }
+  .download-instructions li { margin: 8px 0; }
+  .back-link { display: inline-block; color: var(--accent); text-decoration: none; margin: 24px; }
+</style>
+</head>
+<body>
+  <a class="skip-link" href="#main">Skip to main content</a>
+  <a href="index.html" class="back-link">? Back to app</a>
+  
+  <main id="main" class="main" style="padding-bottom: 40px;">
+    <div class="download-hero">
+      <img src="logo/image-removebg-preview.png" alt="LMTLSS" class="download-logo" />
+      <h1 class="download-title">Download LMTLSS</h1>
+      <p class="download-subtitle">Train smarter. Track everything. Improve across sports.</p>
+    </div>
+
+    <div class="download-cards">
+      <div class="download-card">
+        <div class="download-card-header">
+          <span class="download-card-icon">??</span>
+          <h2 class="download-card-title">iOS</h2>
+        </div>
+        <p class="download-card-desc">Install on iPhone and iPad via TestFlight or direct install</p>
+        <a href="#" class="download-button" id="ios-link">Download for iOS</a>
+      </div>
+
+      <div class="download-card">
+        <div class="download-card-header">
+          <span class="download-card-icon">??</span>
+          <h2 class="download-card-title">Android</h2>
+        </div>
+        <p class="download-card-desc">Install APK directly on Android devices</p>
+        <a href="#" class="download-button" id="android-link">Download for Android</a>
+      </div>
+
+      <div class="download-card">
+        <div class="download-card-header">
+          <span class="download-card-icon">??</span>
+          <h2 class="download-card-title">Web App</h2>
+        </div>
+        <p class="download-card-desc">Use LMTLSS in your browser - no install needed</p>
+        <a href="index.html" class="download-button secondary">Open Web App</a>
+      </div>
+    </div>
+
+    <div class="download-instructions">
+      <h3>Installation Instructions</h3>
+      <h4 style="color: var(--text); margin: 16px 0 8px;">For iOS (TestFlight)</h4>
+      <ol>
+        <li>Tap the "Download for iOS" button above</li>
+        <li>Accept the TestFlight invitation if prompted</li>
+        <li>Install the app from TestFlight</li>
+        <li>Trust the developer if asked in Settings &gt; General &gt; VPN &amp; Device Management</li>
+      </ol>
+      <h4 style="color: var(--text); margin: 16px 0 8px;">For Android (APK)</h4>
+      <ol>
+        <li>Tap the "Download for Android" button above</li>
+        <li>Allow downloads from your browser if prompted</li>
+        <li>Open the downloaded APK file</li>
+        <li>Allow installation from unknown sources if prompted</li>
+        <li>Install and open LMTLSS</li>
+      </ol>
+      <p style="margin-top: 24px; padding: 12px; background: var(--surface); border-radius: 8px; border: 1px solid var(--border);">
+        <strong style="color: var(--text);">Note:</strong> Update the download links above with your actual TestFlight and APK URLs once deployed.
+      </p>
+    </div>
+  </main>
+</body>
+</html>
