@@ -95,6 +95,8 @@
     UI.clear(navEl);
     navEl.style.display = "none";
     UI.clear(mainEl);
+    mainEl.style.maxWidth = '100%';
+    mainEl.style.padding = '0';
 
     const wrap = el("div", { class: "landing" }, [
       el("nav", { class: "landing-nav" }, [
