@@ -98,9 +98,20 @@ export function createNodeDb(db) {
 }
 
 /** Resolve whichever binding the environment provides (D1 in prod, sqlite in tests). */
+const d1Cache = new WeakMap();
+
 export function dbFromEnv(env) {
   if (env && env.__db) return env.__db; // test seam
-  if (env && env.DB) return createD1Db(env.DB);
+  if (env && env.DB) {
+    // One wrapper per binding, so api.js's per-connection migration cache
+    // actually holds across requests in the same isolate.
+    let db = d1Cache.get(env.DB);
+    if (!db) {
+      db = createD1Db(env.DB);
+      d1Cache.set(env.DB, db);
+    }
+    return db;
+  }
   throw new Error("no database bound: expected env.DB (D1)");
 }
 

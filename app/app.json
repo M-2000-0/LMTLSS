@@ -7,8 +7,28 @@
     "icon": "./assets/icon.png",
     "userInterfaceStyle": "dark",
     "scheme": "lmtlss",
+    "plugins": [
+      [
+    "expo-location",
+    {
+      "locationWhenInUsePermission": "LMTLSS uses your location to record your run while you use the app.",
+      "locationAlwaysAndWhenInUsePermission": "LMTLSS records your run when the screen is off or the app is in the background. Distance and route come from your location history while recording.",
+      "isIosBackgroundLocationEnabled": true,
+      "isAndroidBackgroundLocationEnabled": true,
+      "isAndroidForegroundServiceEnabled": true
+    }
+  ],
+  "@maplibre/maplibre-react-native",
+  "expo-status-bar",
+  "expo-secure-store",
+  "expo-sharing"
+],
     "ios": {
-      "supportsTablet": true
+      "supportsTablet": true,
+      "infoPlist": {
+        "NSLocationWhenInUseUsageDescription": "LMTLSS uses your location to record your run while you use the app.",
+        "NSLocationAlwaysAndWhenInUseUsageDescription": "LMTLSS records your run when the screen is off or the app is in the background. Distance and route come from your location history while recording."
+      }
     },
     "android": {
       "package": "com.lmtlss.app",

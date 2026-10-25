@@ -10,5 +10,8 @@
     "test:server": "node --test \"server/tests/**/*.test.js\"",
     "typecheck": "npm --prefix shared run typecheck && npm --prefix app run typecheck && node --check server/src/worker.js",
     "lint": "npm --prefix shared run lint && npm --prefix app run lint"
+  },
+  "dependencies": {
+    "sharp": "^0.35.5"
   }
 }

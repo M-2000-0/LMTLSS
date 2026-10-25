@@ -135,8 +135,8 @@ test("the API migrates any database it is handed, per connection", async () => {
   const second = await makeEnv({ skipMigrate: true });
   const one = await call(first, "GET", "/api/health");
   const two = await call(second, "GET", "/api/health");
-  assert.equal(one.body.schemaMigrations, 1);
-  assert.equal(two.body.schemaMigrations, 1);
+  assert.equal(one.body.schemaMigrations, 2);
+  assert.equal(two.body.schemaMigrations, 2);
 });
 
 test("the D1 adapter serves a full club + event flow through a D1-shaped binding", async () => {
@@ -189,15 +189,24 @@ test("a failed migration is retried on the next request, not cached as failed", 
 
   // The same connection must be retried once the conflict is gone — a cached
   // failure would leave this database permanently broken.
-  h.raw.exec("DROP TABLE users");
+  h.raw.exec(`DROP TABLE users`);
   const healed = await call(h, "GET", "/api/health");
   assert.equal(healed.status, 200);
-  assert.equal(healed.body.schemaMigrations, 1);
+  assert.equal(healed.body.schemaMigrations, 2);
+
+  // The retry must have actually run through the D1 adapter, not skipped via a
+  // cached failure. The canonical proof is the schema_migrations table in the
+  // same connection — a cached failure would leave it empty and keep returning
+  // 500 forever.
+  const appliedVersions = h.raw.prepare("SELECT version FROM schema_migrations ORDER BY version").all();
+  assert.equal(appliedVersions.length, 2, "the same connection remembers the migrations succeeded after the retry");
+  assert.equal(appliedVersions[0].version, 1, "the retried connection applied migration 1");
+  assert.equal(appliedVersions[1].version, 2, "and migration 2");
 
   const healthy = await makeEnv();
   const ok = await call(healthy, "GET", "/api/health");
   assert.equal(ok.status, 200);
-  assert.equal(ok.body.schemaMigrations, 1);
+  assert.equal(ok.body.schemaMigrations, 2);
 });
 
 test("a token for a deleted account can no longer act", async () => {

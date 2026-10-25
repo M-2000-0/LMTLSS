@@ -81,6 +81,7 @@
     svg.setAttribute("stroke-linejoin", "round");
     svg.setAttribute("aria-hidden", "true");
     if (cls) svg.setAttribute("class", cls);
+    // Static icon paths only — P[name] is a module constant, never user input.
     svg.innerHTML = P[name] || "";
     return svg;
   }
@@ -196,6 +197,8 @@
     svg.setAttribute("role", "img");
     svg.setAttribute("aria-label", opts.a11yLabel || "Trend chart");
     svg.style.height = h + "px";
+    // Static chart SVG — path/area are computed from numeric data, never from
+    // user strings. Gradient IDs are module constants.
     svg.innerHTML =
       '<defs><linearGradient id="chart-grad" x1="0" y1="0" x2="0" y2="1">' +
       '<stop offset="0%" stop-color="#61EB1A"/><stop offset="100%" stop-color="#61EB1A" stop-opacity="0"/>' +
@@ -243,6 +246,8 @@
     svg.setAttribute("aria-hidden", "true");
     svg.style.width = "100%";
     svg.style.height = h + "px";
+    // Static sparkline SVG — path is computed from numeric data; color defaults
+    // to the accent and is only overridable by the caller with a fixed token.
     svg.innerHTML = '<path fill="none" stroke="' + (opts.color || "#61EB1A") + '" stroke-width="1.8" stroke-linecap="round" d="' + path + '"/>';
     return svg;
   }
@@ -254,11 +259,32 @@
     svg.setAttribute("viewBox", "0 0 64 64");
     svg.setAttribute("role", "img");
     svg.setAttribute("aria-label", Math.round(pct * 100) + "% complete" + (label ? " — " + label : ""));
+    // Static progress-ring SVG — geometry is computed from a numeric pct; no
+    // user strings enter the markup.
     svg.innerHTML =
       '<circle cx="32" cy="32" r="' + r + '" fill="none" stroke="#262626" stroke-width="5"/>' +
       '<circle cx="32" cy="32" r="' + r + '" fill="none" stroke="#61EB1A" stroke-width="5" stroke-linecap="round" ' +
       'stroke-dasharray="' + (c * pct).toFixed(1) + ' ' + c.toFixed(1) + '" transform="rotate(-90 32 32)"/>';
     return svg;
+  }
+
+  // Logo — transparent pill asset, same one used on the web header and in share
+  // cards (logo/lmtlss-sharecard-embed.png). Kept consistent with the native
+  // screens for the same brand shape / placement.
+  const LOGO_SRC = "logo/lmtlss-sharecard-embed.png";
+
+  function logo(size, cls) {
+    size = size || 40;
+    const img = document.createElement("img");
+    img.src = LOGO_SRC;
+    img.alt = "LMTLSS";
+    img.setAttribute("width", String(size));
+    img.setAttribute("height", String(size));
+    img.setAttribute("loading", "lazy");
+    img.style.display = "block";
+    img.style.flex = "0 0 auto";
+    if (cls) img.className = cls;
+    return img;
   }
 
   window.UI = {
@@ -267,6 +293,7 @@
     clear: clear,
     plural: plural,
     icon: icon,
+    logo: logo,
     toast: toast,
     sheet: sheet,
     closeSheet: closeSheet,

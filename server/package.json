@@ -6,7 +6,8 @@
   "description": "LMTLSS API — dependency-free Cloudflare Worker + D1. Run locally with node --test; deploy with wrangler.",
   "scripts": {
     "test": "node --test tests/",
-    "check": "node --check src/worker.js && node --check src/api.js"
+    "check": "node --check src/worker.js && node --check src/api.js && node --check src/auth.js && node --check src/routes/auth.js",
+    "schema:build": "node scripts/build-schema.mjs"
   },
   "dependencies": {},
   "devDependencies": {}

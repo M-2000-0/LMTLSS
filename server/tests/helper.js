@@ -7,13 +7,14 @@
  */
 
 import { DatabaseSync } from "node:sqlite";
-import { createHmac } from "node:crypto";
+import { createHmac, createSign, generateKeyPairSync } from "node:crypto";
 import { createNodeDb } from "../src/db.js";
 import { handleApi } from "../src/api.js";
 import { ensureSchema } from "../src/migrate.js";
 
 export const TEST_SECRET = "test-secret-value-please-do-not-use-in-production";
 export const TEST_ISSUER = "https://issuer.test";
+export const TEST_PEPPER = "test-pepper-not-for-production";
 
 export async function makeEnv(options) {
   const opts = options || {};
@@ -27,13 +28,19 @@ export async function makeEnv(options) {
     __db: db,
     __raw: raw,
     __now: function () { return state.nowMs; },
+    __emailSink: opts.emailSink === false ? undefined : [],
     AUTH_JWT_SECRET: opts.authSecret === null ? undefined : (opts.authSecret || TEST_SECRET),
     AUTH_ISSUER: opts.issuer === null ? undefined : (opts.issuer || TEST_ISSUER),
     AUTH_AUDIENCE: "lmtlss-api",
+    AUTH_PEPPER: opts.pepper === null ? undefined : (opts.pepper || TEST_PEPPER),
+    GOOGLE_CLIENT_ID: opts.googleClientId || undefined,
+    APPLE_CLIENT_ID: opts.appleClientId || undefined,
+    __jwks: opts.jwks || undefined,
     LOG_ERRORS: "off"
   };
   if (opts.authSecret === null) delete env.AUTH_JWT_SECRET;
   if (opts.issuer === null) delete env.AUTH_ISSUER;
+  if (opts.emailSink === false) delete env.__emailSink;
   return { env: env, db: db, clock: state, raw: raw };
 }
 
@@ -86,4 +93,63 @@ export async function newAthlete(harness, name, options) {
 
 export function rows(db, sql, ...params) {
   return db.all(sql, ...params);
+}
+
+export function lastEmail(harness) {
+  const sink = harness.env.__emailSink || [];
+  return sink[sink.length - 1] || null;
+}
+
+export function codeFromEmail(message) {
+  const match = /(\d{6})/.exec((message && message.text) || "");
+  return match ? match[1] : null;
+}
+
+/** Sign up, read the code from the test sink, verify, and return the session. */
+export async function signupAndVerify(harness, options) {
+  const opts = options || {};
+  const email = opts.email || "athlete-" + Math.random().toString(36).slice(2, 8) + "@example.test";
+  const password = opts.password || "correct horse battery staple";
+  const signup = await call(harness, "POST", "/api/auth/signup", {
+    body: { email: email, password: password, name: opts.name || "Test Athlete" }
+  });
+  const message = lastEmail(harness);
+  const code = codeFromEmail(message);
+  const verify = await call(harness, "POST", "/api/auth/verify-email", {
+    body: { email: email, code: code, deviceName: "Test phone", platform: "android" }
+  });
+  return {
+    email: email, password: password, signup: signup, message: message, code: code,
+    verify: verify, token: verify.body.token, id: verify.body.user && verify.body.user.id
+  };
+}
+
+/** An RSA key pair whose public half can be injected as a JWKS. */
+export function rsaKey() {
+  const pair = generateKeyPairSync("rsa", { modulusLength: 2048 });
+  const jwk = pair.publicKey.export({ format: "jwk" });
+  return {
+    privateKey: pair.privateKey,
+    jwk: Object.assign({}, jwk, { kid: "test-key", alg: "RS256", use: "sig" })
+  };
+}
+
+/** Sign an RS256 JWT the way Google or Apple would. */
+export function tokenForRs256(sub, claims, options) {
+  const opts = options || {};
+  const now = opts.now === undefined ? Date.parse("2026-10-18T18:00:00.000Z") : opts.now;
+  const header = b64url(JSON.stringify({ alg: "RS256", typ: "JWT", kid: opts.kid || "test-key" }));
+  const payload = b64url(JSON.stringify(Object.assign({
+    sub: sub,
+    iss: opts.issuer || "https://accounts.google.com",
+    aud: opts.audience || "test-client",
+    iat: Math.floor(now / 1000),
+    exp: Math.floor((now + (opts.ttlSec === undefined ? 3600 : opts.ttlSec) * 1000) / 1000)
+  }, claims || {})));
+  const signer = createSign("RSA-SHA256");
+  signer.update(header + "." + payload);
+  signer.end();
+  const signature = signer.sign(opts.privateKey).toString("base64")
+    .replace(/\+/g, "-").replace(/\//g, "_").replace(/=+$/, "");
+  return header + "." + payload + "." + signature;
 }

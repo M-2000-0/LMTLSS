@@ -251,7 +251,7 @@
 
   /* ---------- sport model ---------- */
 
-  eq("sports model covers the advertised activity list", Domain.SPORTS.length, 14);
+  eq("sports model covers the advertised activity list", Domain.SPORTS.length, 28);
   ok("boxing records rounds", Domain.sportById("boxing").metrics.indexOf("rounds") >= 0);
   ok("running does not record rounds", Domain.sportById("running").metrics.indexOf("rounds") < 0);
   eq("unknown sport has no metric definitions", Domain.metricDefs("quidditch").length, 0);
@@ -392,8 +392,12 @@
 
   // Honesty: without stored coordinates, the card must not contain a route path
   const noRouteSVG = ShareCards.toSVG(runCard, {});
-  ok("no route in SVG when session has none", noRouteSVG.indexOf("<path") < 0);
+  // 'no route' means no route path in the map panel. The logo pill has its own
+  // decorative <path> (pill end cap), so check for the route path specifically.
+  ok("no route in SVG when session has none",
+    noRouteSVG.indexOf('stroke="' + "#61EB1A" + '" stroke-width="10"') < 0);
   ok("wordmark present", noRouteSVG.indexOf("LMTLSS") >= 0);
+  ok("logo pill present on every card", noRouteSVG.indexOf("<g transform=\"translate(940,118)\"") >= 0 && noRouteSVG.indexOf("id=\"pillBody\"") >= 0);
   ok("provenance text appears in SVG", noRouteSVG.indexOf("no GPS connected") >= 0);
 
   // Security: user-controlled strings must be escaped, never raw HTML/SVG

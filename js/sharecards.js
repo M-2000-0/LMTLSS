@@ -128,6 +128,33 @@
 
   const W = 1080, H = 1350;
 
+  // Logo pill — inline SVG kept in sync with the reference logo asset
+  // (logo/lmtlss-sharecard-embed.svg). Functional accent only; never decoration.
+  const LOGO = '' +
+    '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 120 120" width="84" height="84" aria-label="LMTLSS" focusable="false">' +
+    '<defs>' +
+    '<linearGradient id="pillBody" x1="0" y1="0" x2="0" y2="1">' +
+    '<stop offset="0" stop-color="#7CFF3E"/>' +
+    '<stop offset="0.5" stop-color="#00E000"/>' +
+    '<stop offset="1" stop-color="#00A800"/>' +
+    '</linearGradient>' +
+    '<radialGradient id="pillHighlight" cx="0.35" cy="0.25" r="0.6">' +
+    '<stop offset="0" stop-color="#FFFFFF" stop-opacity="0.85"/>' +
+    '<stop offset="0.25" stop-color="#FFFFFF" stop-opacity="0.35"/>' +
+    '<stop offset="1" stop-color="#FFFFFF" stop-opacity="0"/>' +
+    '</radialGradient>' +
+    '</defs>' +
+    '<rect x="14" y="30" width="92" height="60" rx="30" ry="30" fill="url(#pillBody)"/>' +
+    '<rect x="14" y="30" width="92" height="34" rx="30" ry="30" fill="url(#pillHighlight)"/>' +
+    '<path d="M24 30 a30 30 0 0 1 52 0" fill="none" stroke="#FFFFFF" stroke-opacity="0.55" stroke-width="3" stroke-linecap="round"/>' +
+    '<circle cx="30" cy="46" r="6" fill="#FFFFFF" opacity="0.9"/>' +
+    '<circle cx="90" cy="50" r="4" fill="#FFFFFF" opacity="0.85"/>' +
+    '<path d="M98 58 L106 74 L90 74 Z" fill="#000000"/>' +
+    '<text x="60" y="66" text-anchor="middle" dominant-baseline="central"' +
+    ' font-family="system-ui, -apple-system, Segoe UI, Roboto, sans-serif"' +
+    ' font-size="22" font-weight="800" letter-spacing="2" fill="#000000">LMTLSS</text>' +
+    '</svg>';
+
   function toSVG(card, opts) {
     opts = opts || {};
     const accent = "#61EB1A", canvas = "#000000", white = "#FFFFFF", muted = "#A3A3A3", surface = "#111111";
@@ -136,53 +163,58 @@
     parts.push('<svg xmlns="http://www.w3.org/2000/svg" width="' + W + '" height="' + H + '" viewBox="0 0 ' + W + ' ' + H + '">');
     parts.push('<rect width="' + W + '" height="' + H + '" fill="' + canvas + '"/>');
 
-    // Wordmark
-    parts.push('<text x="80" y="120" font-family="system-ui, sans-serif" font-size="40" font-weight="800" letter-spacing="6" fill="' + white + '">LMTLSS<tspan fill="' + accent + '">.</tspan></text>');
+
+
+    // Header: logo pill on the right, wordmark + tagline on the left
+    parts.push('<g transform="translate(940,118)">' + LOGO + '</g>');
+    parts.push('<text x="80" y="118" font-family="system-ui, -apple-system, Segoe UI, Roboto, sans-serif" font-size="40" font-weight="800" letter-spacing="6" fill="' + white + '">LMTLSS<tspan fill="' + accent + '">.</tspan></text>');
+    parts.push('<text x="80" y="160" font-family="system-ui, -apple-system, Segoe UI, Roboto, sans-serif" font-size="14" letter-spacing="2.5" fill="' + muted + '">TRAINING LOG</text>');
+    parts.push('<line x1="80" y1="178" x2="1000" y2="178" stroke="' + accent + '" stroke-width="2"/>');
 
     // Route block — ONLY when real coordinates exist
-    const route = card.route ? projectRoute(card.route, W - 160, 560, 40) : null;
+    const route = card.route ? projectRoute(card.route, W - 160, 540, 40) : null;
     if (route) {
-      parts.push('<rect x="80" y="180" width="' + (W - 160) + '" height="560" rx="24" fill="' + surface + '"/>');
-      parts.push('<g transform="translate(80,180)">');
+      parts.push('<rect x="80" y="188" width="' + (W - 160) + '" height="540" rx="24" fill="' + surface + '"/>');
+      parts.push('<g transform="translate(80,188)">');
       parts.push('<path d="' + route.path + '" fill="none" stroke="' + accent + '" stroke-width="10" stroke-linecap="round" stroke-linejoin="round"/>');
       parts.push('<circle cx="' + route.start.x.toFixed(1) + '" cy="' + route.start.y.toFixed(1) + '" r="12" fill="' + white + '"/>');
       parts.push('<circle cx="' + route.end.x.toFixed(1) + '" cy="' + route.end.y.toFixed(1) + '" r="14" fill="' + accent + '"/>');
       parts.push('</g>');
     } else if (card.isPR) {
       // Achievement badge replaces the route block on PR cards without routes
-      parts.push('<rect x="80" y="180" width="' + (W - 160) + '" height="560" rx="24" fill="' + surface + '"/>');
-      parts.push('<text x="' + (W / 2) + '" y="430" text-anchor="middle" font-family="system-ui, sans-serif" font-size="150">🏆</text>');
-      parts.push('<text x="' + (W / 2) + '" y="540" text-anchor="middle" font-family="system-ui, sans-serif" font-size="44" font-weight="800" fill="' + accent + '" letter-spacing="4">PERSONAL RECORD</text>');
+      parts.push('<rect x="80" y="188" width="' + (W - 160) + '" height="540" rx="24" fill="' + surface + '"/>');
+      parts.push('<text x="' + (W / 2) + '" y="420" text-anchor="middle" font-family="system-ui, sans-serif" font-size="150">🏆</text>');
+      parts.push('<text x="' + (W / 2) + '" y="530" text-anchor="middle" font-family="system-ui, sans-serif" font-size="44" font-weight="800" fill="' + accent + '" letter-spacing="4">PERSONAL RECORD</text>');
     } else {
       // Typographic panel — honest empty state, no fabricated map
-      parts.push('<rect x="80" y="180" width="' + (W - 160) + '" height="560" rx="24" fill="' + surface + '"/>');
-      parts.push('<text x="' + (W / 2) + '" y="470" text-anchor="middle" font-family="system-ui, sans-serif" font-size="200" font-weight="800" fill="' + accent + '">' +
+      parts.push('<rect x="80" y="188" width="' + (W - 160) + '" height="540" rx="24" fill="' + surface + '"/>');
+      parts.push('<text x="' + (W / 2) + '" y="455" text-anchor="middle" font-family="system-ui, sans-serif" font-size="200" font-weight="800" fill="' + accent + '">' +
         escapeXML(card.kind === "strength" ? "STRENGTH" : "RUN") + '</text>');
     }
 
     // Title + date
-    parts.push('<text x="80" y="830" font-family="system-ui, sans-serif" font-size="64" font-weight="800" fill="' + white + '">' + escapeXML(card.title) + '</text>');
-    parts.push('<text x="80" y="890" font-family="system-ui, sans-serif" font-size="34" fill="' + muted + '">' + escapeXML(card.dateLabel) + '</text>');
+    parts.push('<text x="80" y="810" font-family="system-ui, sans-serif" font-size="64" font-weight="800" fill="' + white + '">' + escapeXML(card.title) + '</text>');
+    parts.push('<text x="80" y="870" font-family="system-ui, sans-serif" font-size="34" fill="' + muted + '">' + escapeXML(card.dateLabel) + '</text>');
 
     // Stats row
     let x = 80;
     card.stats.slice(0, 3).forEach(function (st) {
-      parts.push('<text x="' + x + '" y="1030" font-family="system-ui, sans-serif" font-size="68" font-weight="800" fill="' + white + '">' + escapeXML(st.value) + '</text>');
-      parts.push('<text x="' + x + '" y="1080" font-family="system-ui, sans-serif" font-size="28" fill="' + muted + '" letter-spacing="2">' + escapeXML(st.label.toUpperCase()) + '</text>');
+      parts.push('<text x="' + x + '" y="1010" font-family="system-ui, sans-serif" font-size="68" font-weight="800" fill="' + white + '">' + escapeXML(st.value) + '</text>');
+      parts.push('<text x="' + x + '" y="1060" font-family="system-ui, sans-serif" font-size="28" fill="' + muted + '" letter-spacing="2">' + escapeXML(st.label.toUpperCase()) + '</text>');
       x += Math.floor((W - 160) / Math.min(card.stats.length, 3));
     });
 
     // Provenance label — always on the card when distance was manual
     if (card.provenance) {
-      parts.push('<text x="80" y="1180" font-family="system-ui, sans-serif" font-size="26" fill="' + muted + '">' + escapeXML(card.provenance) + '</text>');
+      parts.push('<text x="80" y="1160" font-family="system-ui, sans-serif" font-size="26" fill="' + muted + '">' + escapeXML(card.provenance) + '</text>');
     }
     if (card.achievement && card.achievement.label) {
-      parts.push('<text x="80" y="1180" font-family="system-ui, sans-serif" font-size="30" font-weight="700" fill="' + accent + '">' + escapeXML(card.achievement.label) + '</text>');
+      parts.push('<text x="80" y="1160" font-family="system-ui, sans-serif" font-size="30" font-weight="700" fill="' + accent + '">' + escapeXML(card.achievement.label) + '</text>');
     }
 
     // Footer rule + tagline
-    parts.push('<rect x="80" y="1240" width="' + (W - 160) + '" height="3" fill="' + accent + '"/>');
-    parts.push('<text x="80" y="1300" font-family="system-ui, sans-serif" font-size="28" fill="' + muted + '" letter-spacing="3">YOUR PERFORMANCE. WITHOUT LIMITS.</text>');
+    parts.push('<rect x="80" y="1220" width="' + (W - 160) + '" height="3" fill="' + accent + '"/>');
+    parts.push('<text x="80" y="1280" font-family="system-ui, sans-serif" font-size="28" fill="' + muted + '" letter-spacing="3">YOUR PERFORMANCE. WITHOUT LIMITS.</text>');
     parts.push('</svg>');
     return parts.join("\n");
   }

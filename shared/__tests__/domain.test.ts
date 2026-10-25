@@ -322,7 +322,7 @@ describe("coach rules", () => {
 
 describe("sport model", () => {
   it("covers the advertised activity list", () => {
-    expect(Domain.SPORTS.length).toBe(14);
+    expect(Domain.SPORTS.length).toBe(28);
   });
   it("boxing records rounds", () => {
     expect(Domain.sportById("boxing")?.metrics).toContain("rounds");

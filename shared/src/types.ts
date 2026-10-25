@@ -17,6 +17,25 @@ export interface Profile {
   equipment: string[];
   limitations?: string;
   seeded?: boolean;
+  /** Per-exercise working-load profile: "Back Squat" -> { loadKg, reps, rpe?, stalled?, updatedAt? } */
+  loadProfile?: Record<string, LoadProfileEntry>;
+  [key: string]: unknown;
+}
+
+export interface LoadProfileEntry {
+  loadKg: number;
+  reps: number;
+  rpe?: number;
+  stalled?: boolean;
+  updatedAt?: string;
+  [key: string]: unknown;
+}
+
+export interface SessionIntegrityFlag {
+  /** "ok" | "review" — attached to a logged set when the app has reviewed it locally */
+  integrity?: "ok" | "review";
+  /** Human-readable reason when integrity is "review" */
+  integrityReason?: string;
   [key: string]: unknown;
 }
 
@@ -275,6 +294,16 @@ export interface WeekPlanState {
   appliedAt?: string;
   dismissed?: boolean;
   dismissedAt?: string;
+}
+
+/** One equipment node shown in the gym-equipment selection screen. 
+ * `pictureAsset` is the logo/ asset key used by screens-equipment.js / onboarding. */
+export interface EquipmentNode {
+  id: string;
+  label: string;
+  group: string;
+  pictureAsset: string;
+  equip: string[];
 }
 
 export interface CoachRecommendation {

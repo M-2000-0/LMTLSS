@@ -12,10 +12,11 @@
     const screen = el("div", { class: "screen" });
 
     screen.appendChild(el("div", { class: "screen-head" }, [
-      el("div", {}, [
+      el("div", { class: "brand-group" }, [
         el("h1", { class: "screen-title", text: profile.name || "Profile" }),
         el("p", { class: "screen-sub", text: Domain.GOAL_LABELS[profile.goal] || "No goal set" })
-      ])
+      ]),
+      UI.logo(40)
     ]));
 
     /* Athlete summary — the unified profile across sports */
@@ -103,8 +104,9 @@
       el("div", { class: "section-head" }, [el("h2", { class: "section-title", text: "Integrations" })]),
       el("div", { class: "panel" }, [
         integrationRow("GPS / route tracking", "Not connected — distances are manual or estimated", false),
-        integrationRow("Wearables (Garmin, Apple Watch, WHOOP)", "Coming in Phase 3 — not implemented yet", false),
-        integrationRow("Health platforms (HealthKit, Health Connect)", "Coming in Phase 3 — not implemented yet", false)
+        integrationRow("Wearables (Garmin, Polar, WHOOP, Suunto, COROS, Oura)", "Not connected — vendor cloud APIs need a deployed backend and partner approval; no watch app exists yet", false),
+        integrationRow("Health platforms (HealthKit, Health Connect)", "Not connected — no health module is compiled into this build", false),
+        integrationRow("Strava / FIT, TCX, GPX files", "Not connected here — the mobile app can import FIT, TCX, and GPX exports; this web build cannot. Strava needs a deployed backend and an approved API app", false)
       ]),
       el("p", { class: "micro muted-2 mt-3", text: "LMTLSS never shows a capability as working before it is implemented and tested." })
     ]));

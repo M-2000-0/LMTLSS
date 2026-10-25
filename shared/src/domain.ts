@@ -12,6 +12,7 @@ import type {
   AppState,
   ClockState,
   CoachRecommendation,
+  EquipmentNode,
   ExerciseLibraryEntry,
   Experience,
   Insight,
@@ -20,6 +21,7 @@ import type {
   PlannedExercise,
   PlannedSession,
   Profile,
+  LoadProfileEntry,
   FuelSummary,
   MealEntry,
   RecoveryDay,
@@ -323,28 +325,20 @@ function runningIntervalSummary(session: IntervalSessionInput): RunningIntervalS
       completedSegments: 0
     };
   }
+  if (!segs.length) {
+    const pace = session.distanceM && totalTime > 5 ? totalTime / (session.distanceM / 1000) : null;
+    return { segments: segs, totalTime, distKm: session.distanceM ? session.distanceM / 1000 : null, avgPaceSecPerKm: pace, totalWorkSec: 0, totalRestSec: 0, workCount: 0, restCount: 0, lastSegmentIndex: -1, template: tmpl, completedSegments: 0 };
+  }
   let totalWorkSec = 0, totalRestSec = 0, workCount = 0, restCount = 0, lastIndex = -1;
-  segs.forEach(function (s) {
+  segs.forEach((s) => {
     if (s.segmentType === "work") { totalWorkSec += s.durationSec || 0; workCount++; }
     else if (s.segmentType === "rest") { totalRestSec += s.durationSec || 0; restCount++; }
     if (s.done) lastIndex = Math.max(lastIndex, s.index);
   });
+  const completedSegments = lastIndex >= 0 ? lastIndex + 1 : 0;
   const template = tmpl && tmpl.segments.length ? tmpl : null;
-  return {
-    segments: segs,
-    totalTime: totalTime,
-    distKm: session.distanceM ? session.distanceM / 1000 : null,
-    avgPaceSecPerKm: session.distanceM && totalTime > 5
-      ? totalTime / (session.distanceM / 1000)
-      : null,
-    totalWorkSec: totalWorkSec,
-    totalRestSec: totalRestSec,
-    workCount: workCount,
-    restCount: restCount,
-    lastSegmentIndex: lastIndex,
-    template: template,
-    completedSegments: lastIndex >= 0 ? lastIndex + 1 : 0
-  };
+  const pace = session.distanceM && totalTime > 5 ? totalTime / (session.distanceM / 1000) : null;
+  return { segments: segs, totalTime, totalWorkSec, totalRestSec, workCount, restCount, lastSegmentIndex: lastIndex, template, completedSegments, distKm: session.distanceM ? session.distanceM / 1000 : null, avgPaceSecPerKm: pace };
 }
 
 function weeklyVolumeSeries(state: AppState, weeks?: number): WeekPoint[] {
@@ -901,6 +895,7 @@ export interface SportDef {
   label: string;
   group: string;
   metrics: string[];
+  depth?: "full" | "light";
 }
 
 // Metric vocabulary — one definition per value an activity can carry.
@@ -923,25 +918,436 @@ const METRICS: Record<string, MetricDef> = {
   strokeStyle: { label: "Stroke", kind: "text" },
   opponent: { label: "Opponent", kind: "text" },
   result: { label: "Result", kind: "text" },
-  effort: { label: "Perceived effort", kind: "effort" }
+  effort: { label: "Perceived effort", kind: "effort" },
+  style: { label: "Style", kind: "text" },
+  focus: { label: "Focus", kind: "text" },
+  name: { label: "Name / WOD", kind: "text" },
+  stairs: { label: "Stairs", kind: "count" },
+  exercises: { label: "Exercises", kind: "text" }
 };
 
+/* Supported sports. `metrics` is the full vocabulary the sport CAN record;
+   a given activity only renders the ones it actually has. */
 const SPORTS: SportDef[] = [
-  { id: "running", label: "Running", group: "endurance", metrics: ["durationSec", "distanceM", "pace", "elevationM", "effort"] },
-  { id: "cycling", label: "Cycling", group: "endurance", metrics: ["durationSec", "distanceM", "speed", "elevationM", "effort"] },
-  { id: "swimming", label: "Swimming", group: "endurance", metrics: ["durationSec", "distanceM", "pace", "strokeStyle", "effort"] },
-  { id: "strength", label: "Strength", group: "strength", metrics: ["durationSec", "sets", "reps", "loadKg", "effort"] },
-  { id: "boxing", label: "Boxing", group: "combat", metrics: ["durationSec", "rounds", "roundDurationSec", "result", "effort"] },
-  { id: "mma", label: "MMA", group: "combat", metrics: ["durationSec", "rounds", "roundDurationSec", "result", "effort"] },
-  { id: "taekwondo", label: "Taekwondo", group: "combat", metrics: ["durationSec", "rounds", "roundDurationSec", "score", "result"] },
-  { id: "martial-arts", label: "Martial arts", group: "combat", metrics: ["durationSec", "rounds", "score", "effort"] },
-  { id: "tennis", label: "Tennis", group: "racket", metrics: ["durationSec", "setsWon", "score", "opponent", "effort"] },
-  { id: "pickleball", label: "Pickleball", group: "racket", metrics: ["durationSec", "setsWon", "score", "opponent", "effort"] },
-  { id: "golf", label: "Golf", group: "precision", metrics: ["durationSec", "holes", "strokes", "score", "effort"] },
-  { id: "archery", label: "Archery", group: "precision", metrics: ["durationSec", "arrows", "score", "effort"] },
-  { id: "team-sports", label: "Team sports", group: "team", metrics: ["durationSec", "score", "result", "effort"] },
-  { id: "other", label: "Other", group: "other", metrics: ["durationSec", "score", "effort"] }
+  { id: "running", label: "Running", group: "endurance", metrics: ["durationSec", "distanceM", "pace", "elevationM", "effort"], depth: "full" },
+  { id: "cycling", label: "Cycling", group: "endurance", metrics: ["durationSec", "distanceM", "speed", "elevationM", "effort"], depth: "light" },
+  { id: "swimming", label: "Swimming", group: "endurance", metrics: ["durationSec", "distanceM", "pace", "strokeStyle", "effort"], depth: "light" },
+  { id: "strength", label: "Strength", group: "strength", metrics: ["durationSec", "sets", "reps", "loadKg", "effort"], depth: "full" },
+  { id: "boxing", label: "Boxing", group: "combat", metrics: ["durationSec", "rounds", "roundDurationSec", "result", "effort"], depth: "light" },
+  { id: "mma", label: "MMA", group: "combat", metrics: ["durationSec", "rounds", "roundDurationSec", "result", "effort"], depth: "light" },
+  { id: "taekwondo", label: "Taekwondo", group: "combat", metrics: ["durationSec", "rounds", "roundDurationSec", "score", "result"], depth: "light" },
+  { id: "martial-arts", label: "Martial arts", group: "combat", metrics: ["durationSec", "rounds", "score", "effort"], depth: "light" },
+  { id: "tennis", label: "Tennis", group: "racket", metrics: ["durationSec", "setsWon", "score", "opponent", "effort"], depth: "light" },
+  { id: "pickleball", label: "Pickleball", group: "racket", metrics: ["durationSec", "setsWon", "score", "opponent", "effort"], depth: "light" },
+  { id: "golf", label: "Golf", group: "precision", metrics: ["durationSec", "holes", "strokes", "score", "effort"], depth: "light" },
+  { id: "archery", label: "Archery", group: "precision", metrics: ["durationSec", "arrows", "score", "effort"], depth: "light" },
+  { id: "team-sports", label: "Team sports", group: "team", metrics: ["durationSec", "score", "result", "effort"], depth: "light" },
+  { id: "other", label: "Other", group: "other", metrics: ["durationSec", "score", "effort"], depth: "light" },
+  { id: "yoga", label: "Yoga", group: "mobility", metrics: ["durationSec", "style", "effort"], depth: "light" },
+  { id: "pilates", label: "Pilates", group: "mobility", metrics: ["durationSec", "style", "effort"], depth: "light" },
+  { id: "stretching", label: "Stretching / mobility work", group: "mobility", metrics: ["durationSec", "focus", "effort"], depth: "light" },
+  { id: "calisthenics", label: "Calisthenics", group: "strength", metrics: ["durationSec", "exercises", "sets", "reps", "effort"], depth: "light" },
+  { id: "hiit", label: "HIIT / circuit", group: "strength", metrics: ["durationSec", "rounds", "roundDurationSec", "effort"], depth: "light" },
+  { id: "jump-rope", label: "Jump rope (skill / conditioning)", group: "cardio", metrics: ["durationSec", "reps", "effort"], depth: "light" },
+  { id: "rowing", label: "Rowing (erg or on-water)", group: "endurance", metrics: ["durationSec", "distanceM", "pace", "strokes", "effort"], depth: "light" },
+  { id: "ski-erg", label: "Ski erg / Nordic skiing", group: "endurance", metrics: ["durationSec", "distanceM", "pace", "effort"], depth: "light" },
+  { id: "elliptical", label: "Elliptical / cross-trainer", group: "endurance", metrics: ["durationSec", "distanceM", "effort"], depth: "light" },
+  { id: "stair-climber", label: "Stair climber / step mill", group: "endurance", metrics: ["durationSec", "stairs", "effort"], depth: "light" },
+  { id: "hiking", label: "Hiking", group: "endurance", metrics: ["durationSec", "distanceM", "elevationM", "effort"], depth: "light" },
+  { id: "walking", label: "Walking", group: "endurance", metrics: ["durationSec", "distanceM", "effort"], depth: "light" },
+  { id: "sprinting", label: "Track sprint / speed work", group: "endurance", metrics: ["durationSec", "distanceM", "pace", "effort"], depth: "light" },
+  { id: "crossfit", label: "CrossFit / WOD", group: "strength", metrics: ["durationSec", "name", "rounds", "score", "effort"], depth: "light" }
 ];
+
+function depthOfSport(sportId: string): string {
+  const s = sportById(sportId);
+  return s && s.depth ? s.depth : "light";
+}
+
+/* ---------- Machine / equipment catalogue ---------- */
+
+export interface MachineEntry {
+  id: string;
+  label: string;
+  group: string;
+  equip: string[];
+}
+
+export const MACHINES: MachineEntry[] = [
+  // --- Free weights ---
+  { id: "barbell", label: "Barbell", group: "free-weights", equip: ["barbell"] },
+  { id: "ez-bar", label: "EZ-curl bar", group: "free-weights", equip: ["ezBar"] },
+  { id: "trap-bar", label: "Trap / hex bar", group: "free-weights", equip: ["trapBar"] },
+  { id: "dumbbell-rack", label: "Dumbbell rack", group: "free-weights", equip: ["dumbbells"] },
+  { id: "dumbbells", label: "Adjustable dumbbells", group: "free-weights", equip: ["dumbbells"] },
+  { id: "kettlebell", label: "Kettlebell", group: "free-weights", equip: ["kettlebell"] },
+  { id: "plates", label: "Weight plates (barbell)", group: "free-weights", equip: ["barbell", "plates"] },
+  { id: "dumbbell-plates", label: "Dumbbell / micro plates", group: "free-weights", equip: ["dumbbells", "plates"] },
+  { id: "weight-belt", label: "Weight belt", group: "free-weights", equip: ["weightBelt"] },
+  { id: "weighted-vest", label: "Weighted vest", group: "free-weights", equip: ["weightedVest"] },
+  // --- Rigs & benches ---
+  { id: "squat-rack", label: "Squat rack / power cage", group: "rigs", equip: ["rack"] },
+  { id: "half-rack", label: "Half rack / squat stands", group: "rigs", equip: ["halfRack"] },
+  { id: "bench", label: "Flat / incline bench", group: "rigs", equip: ["bench"] },
+  { id: "adjustable-bench", label: "Adjustable (decline/incline) bench", group: "rigs", equip: ["adjustableBench"] },
+  { id: "pull-up-bar", label: "Pull-up bar (wall / door / rig)", group: "rigs", equip: ["bar"] },
+  { id: "dips-stand", label: "Dips stand / dip station", group: "rigs", equip: ["dips"] },
+  { id: "suspension", label: "Suspension trainer (TRX-style)", group: "rigs", equip: ["suspension"] },
+  { id: "glute-bridge-bench", label: "Glute bridge / hip thrust bench", group: "rigs", equip: ["hipThrustBench"] },
+  // --- Machines ( selectorized / plate-loaded ) ---
+  { id: "leg-press", label: "Leg press machine", group: "machines", equip: ["legPress"] },
+  { id: "hack-squat", label: "Hack squat machine", group: "machines", equip: ["hackSquat"] },
+  { id: "leg-curl", label: "Lying / seated leg curl", group: "machines", equip: ["legCurl"] },
+  { id: "leg-extension", label: "Leg extension", group: "machines", equip: ["legExtension"] },
+  { id: "inner-thigh", label: "Inner / outer thigh (adduction/abduction)", group: "machines", equip: ["legAdduction"] },
+  { id: "calf-raise", label: "Standing / seated calf raise machine", group: "machines", equip: ["calfRaise"] },
+  { id: "chest-press", label: "Chest press machine", group: "machines", equip: ["chestPress"] },
+  { id: "shoulder-press", label: "Shoulder press machine", group: "machines", equip: ["shoulderPress"] },
+  { id: "lat-pulldown", label: "Lat pulldown", group: "machines", equip: ["latPulldown"] },
+  { id: "seated-row", label: "Seated cable row", group: "machines", equip: ["cable", "seatedRow"] },
+  { id: "cable-cross", label: "Double cable / functional trainer (crossover)", group: "machines", equip: ["cable", "functionalTrainer"] },
+  { id: "triceps-pushdown", label: "Triceps pushdown / cable attachment", group: "machines", equip: ["cable", "tricepsAttachment"] },
+  { id: "assisted-dip", label: "Assisted dip / pull-up machine", group: "machines", equip: ["assistedDip"] },
+  { id: "smith-machine", label: "Smith machine", group: "machines", equip: ["smith"] },
+  { id: "hyperextension", label: "Hyperextension (back extension) bench", group: "machines", equip: ["hyperextension"] },
+  { id: "ab-mat", label: "Ab mat / crunch bench", group: "machines", equip: ["abMat"] },
+  // --- Cardio ---
+  { id: "treadmill", label: "Treadmill", group: "cardio", equip: ["treadmills"] },
+  { id: "bike", label: "Stationary bike", group: "cardio", equip: ["bicycle"] },
+  { id: "spin-bike", label: "Spin / indoor cycle bike", group: "cardio", equip: ["spinBike"] },
+  { id: "air-bike", label: "Air bike / assault bike", group: "cardio", equip: ["airBike"] },
+  { id: "rower", label: "Rowing erg", group: "cardio", equip: ["rower"] },
+  { id: "elliptical", label: "Elliptical / cross-trainer", group: "cardio", equip: ["elliptical"] },
+  { id: "stair-climber", label: "Stair climber / step mill", group: "cardio", equip: ["stairClimber"] },
+  { id: "skierg", label: "Ski erg", group: "cardio", equip: ["skiErg"] },
+  { id: "rebounder", label: "Rebounder / mini trampoline", group: "cardio", equip: ["rebounder"] },
+  { id: "jump-rope", label: "Jump rope", group: "cardio", equip: ["jumpRope"] },
+  // --- Accessories ---
+  { id: "yoga-mat", label: "Yoga / exercise mat", group: "accessories", equip: ["yogaMat"] },
+  { id: "foam-roller", label: "Foam roller", group: "accessories", equip: ["foamRoller"] },
+  { id: "massage-ball", label: "Lacrosse / massage ball", group: "accessories", equip: ["massageBall"] },
+  { id: "resistance-bands", label: "Resistance bands / mini bands", group: "accessories", equip: ["bands"] },
+  { id: "pull-up-assist", label: "Pull-up assist bands", group: "accessories", equip: ["assistBands"] },
+  { id: "punch-bag", label: "Punch bag / focus pads", group: "accessories", equip: ["punchBag"] },
+  { id: "speed-ladder", label: "Agility / speed ladder", group: "accessories", equip: ["speedLadder"] },
+  { id: "slam-ball", label: "Slam / med ball", group: "accessories", equip: ["slamBall"] },
+  { id: "ab-wheel", label: "Ab wheel", group: "accessories", equip: ["abWheel"] },
+  { id: "parallette", label: "Parallette / low bars", group: "accessories", equip: ["parallette"] }
+];
+
+function machinesForSport(sportId: string): MachineEntry[] {
+  if (sportId === "strength") return MACHINES.filter((m) => m.group === "free-weights" || m.group === "rigs" || m.group === "machines");
+  if (sportId === "running") return MACHINES.filter((m) => m.equip.indexOf("treadmills") >= 0 || m.equip.indexOf("jumpRope") >= 0 || m.equip.indexOf("weightBelt") >= 0 || m.equip.indexOf("weightedVest") >= 0 || m.group === "accessories");
+  if (sportId === "cycling") return MACHINES.filter((m) => m.equip.indexOf("bicycle") >= 0 || m.equip.indexOf("spinBike") >= 0 || m.equip.indexOf("airBike") >= 0 || m.group === "cardio");
+  if (sportId === "swimming") return MACHINES.filter((m) => m.equip.indexOf("swimming") >= 0 || m.group === "accessories");
+  if (sportId === "mobility") return MACHINES.filter((m) => m.group === "accessories" || m.equip.indexOf("yogaMat") >= 0 || m.equip.indexOf("foamRoller") >= 0 || m.equip.indexOf("massageBall") >= 0);
+  if (sportId === "boxing" || sportId === "mma" || sportId === "taekwondo" || sportId === "martial-arts") return MACHINES.filter((m) => m.equip.indexOf("punchBag") >= 0 || m.equip.indexOf("assistBands") >= 0 || m.group === "accessories" || m.equip.indexOf("suspension") >= 0);
+  if (sportId === "team-sports" || sportId === "racket") return MACHINES.filter((m) => m.group === "cardio" || m.group === "accessories" || m.equip.indexOf("jumpRope") >= 0 || m.equip.indexOf("speedLadder") >= 0);
+  return MACHINES.filter((m) => m.group === "accessories");
+}
+
+/* ---------- Gym-equipment selection model (per-machine pictures + working weights) ---------- */
+
+/** Every equipment node the gym-equipment selector exposes (listed by equip token). */
+export const EQUIPMENT_NODES: EquipmentNode[] = [
+  // Cardio machines
+  { id: "treadmills", label: "Treadmill", group: "cardio", pictureAsset: "treadmill", equip: ["treadmills"] },
+  { id: "spin-bike", label: "Spin bike", group: "cardio", pictureAsset: "bike-spin", equip: ["spinBike"] },
+  { id: "air-bike", label: "Air / assault bike", group: "cardio", pictureAsset: "bike-air", equip: ["airBike"] },
+  { id: "rower", label: "Rowing erg", group: "cardio", pictureAsset: "rower", equip: ["rower"] },
+  { id: "elliptical", label: "Elliptical / cross-trainer", group: "cardio", pictureAsset: "elliptical", equip: ["elliptical"] },
+  { id: "stair-climber", label: "Stair climber / step mill", group: "cardio", pictureAsset: "stairs", equip: ["stairClimber"] },
+  { id: "ski-erg", label: "Ski erg", group: "cardio", pictureAsset: "skierg", equip: ["skiErg"] },
+  // Free-weight machines / rigs
+  { id: "barbell", label: "Barbell", group: "free-weights", pictureAsset: "barbell", equip: ["barbell"] },
+  { id: "ez-bar", label: "EZ / curl bar", group: "free-weights", pictureAsset: "ezbar", equip: ["ezBar"] },
+  { id: "trap-bar", label: "Trap / hex bar", group: "free-weights", pictureAsset: "trapbar", equip: ["trapBar"] },
+  { id: "squat-rack", label: "Squat rack / power cage", group: "rigs", pictureAsset: "rack", equip: ["rack"] },
+  { id: "half-rack", label: "Half rack / squat stands", group: "rigs", pictureAsset: "rack-half", equip: ["halfRack"] },
+  { id: "bench", label: "Flat / incline bench", group: "rigs", pictureAsset: "bench", equip: ["bench"] },
+  { id: "pull-up-bar", label: "Pull-up bar", group: "rigs", pictureAsset: "pullupbar", equip: ["bar"] },
+  { id: "dips-stand", label: "Dips stand / station", group: "rigs", pictureAsset: "dips", equip: ["dips"] },
+  { id: "suspension", label: "Suspension trainer (TRX)", group: "rigs", pictureAsset: "suspension", equip: ["suspension"] },
+  { id: "glute-bridge-bench", label: "Hip thrust / glute bridge bench", group: "rigs", pictureAsset: "hipthrust", equip: ["hipThrustBench"] },
+  // Selectorized / plate-loaded machines
+  { id: "leg-press", label: "Leg press machine", group: "machines", pictureAsset: "legpress", equip: ["legPress"] },
+  { id: "hack-squat", label: "Hack squat machine", group: "machines", pictureAsset: "hack-squat-img", equip: ["hackSquat"] },
+  { id: "leg-curl", label: "Leg curl (lying / seated)", group: "machines", pictureAsset: "legcurl", equip: ["legCurl"] },
+  { id: "leg-extension", label: "Leg extension", group: "machines", pictureAsset: "legextension", equip: ["legExtension"] },
+  { id: "inner-thigh", label: "Inner / outer thigh (adduction/abduction)", group: "machines", pictureAsset: "innerthigh", equip: ["legAdduction"] },
+  { id: "calf-raise", label: "Calf raise machine", group: "machines", pictureAsset: "calfraisers", equip: ["calfRaise"] },
+  { id: "chest-press", label: "Chest press machine", group: "machines", pictureAsset: "chestpress", equip: ["chestPress"] },
+  { id: "shoulder-press", label: "Shoulder press machine", group: "machines", pictureAsset: "shoulderpress", equip: ["shoulderPress"] },
+  { id: "lat-pulldown", label: "Lat pulldown", group: "machines", pictureAsset: "latpulldown", equip: ["latPulldown"] },
+  { id: "seatedrow", label: "Seated cable row", group: "machines", pictureAsset: "seatedrow", equip: ["cable", "seatedRow"] },
+  { id: "cable-cross", label: "Double cable / functional trainer", group: "machines", pictureAsset: "cablecross", equip: ["cable", "functionalTrainer"] },
+  { id: "assisted-dip", label: "Assisted dip / pull-up machine", group: "machines", pictureAsset: "assisted", equip: ["assistedDip"] },
+  { id: "smith-machine", label: "Smith machine", group: "machines", pictureAsset: "smith", equip: ["smith"] },
+  { id: "hyperextension", label: "Hyperextension (back extension) bench", group: "machines", pictureAsset: "hyperext", equip: ["hyperextension"] },
+  { id: "ab-mat", label: "Ab mat / crunch bench", group: "machines", pictureAsset: "abmat", equip: ["abMat"] },
+  // Dumbbells / kettlebells / plates / accessories
+  { id: "dumbbells", label: "Adjustable dumbbells", group: "free-weights", pictureAsset: "dumbbells", equip: ["dumbbells"] },
+  { id: "kettlebell", label: "Kettlebell", group: "free-weights", pictureAsset: "kettlebell", equip: ["kettlebell"] },
+  { id: "plates", label: "Weight plates (barbell)", group: "free-weights", pictureAsset: "plates", equip: ["barbell", "plates"] },
+  { id: "dumbbell-plates", label: "Dumbbell / micro plates", group: "free-weights", pictureAsset: "dlettes", equip: ["dumbbells", "plates"] },
+  { id: "weight-belt", label: "Weight belt", group: "accessories", pictureAsset: "weightbelt", equip: ["weightBelt"] },
+  { id: "weighted-vest", label: "Weighted vest", group: "accessories", pictureAsset: "weightedvest", equip: ["weightedVest"] },
+  { id: "resistance-bands", label: "Resistance bands / mini bands", group: "accessories", pictureAsset: "bands", equip: ["bands"] },
+  { id: "pull-up-assist", label: "Pull-up assist bands", group: "accessories", pictureAsset: "bandassist", equip: ["assistBands"] },
+  { id: "punch-bag", label: "Punch bag / focus pads", group: "accessories", pictureAsset: "punchbag", equip: ["punchBag"] },
+  { id: "slam-ball", label: "Slam / medicine ball", group: "accessories", pictureAsset: "slamball", equip: ["slamBall"] },
+  { id: "ab-wheel", label: "Ab wheel", group: "accessories", pictureAsset: "abwheel", equip: ["abWheel"] },
+  { id: "parallette", label: "Parallette / low bars", group: "accessories", pictureAsset: "parallette", equip: ["parallette"] },
+  { id: "yogamat", label: "Yoga / exercise mat", group: "accessories", pictureAsset: "yogamat", equip: ["yogaMat"] },
+  { id: "foam-roller", label: "Foam roller", group: "accessories", pictureAsset: "foamroller", equip: ["foamRoller"] },
+  { id: "massage-ball", label: "Lacrosse / massage ball", group: "accessories", pictureAsset: "massageball", equip: ["massageBall"] },
+  { id: "speed-ladder", label: "Agility / speed ladder", group: "accessories", pictureAsset: "ladder", equip: ["speedLadder"] },
+  { id: "jump-rope", label: "Jump rope", group: "accessories", pictureAsset: "jump rope", equip: ["jumpRope"] },
+  { id: "rebounder", label: "Rebounder / mini trampoline", group: "accessories", pictureAsset: "rebounder", equip: ["rebounder"] }
+];
+
+/** Equipment node matching a single equip token, or null. */
+function equipmentNodeForEquip(equipToken: string): EquipmentNode | null {
+  return EQUIPMENT_NODES.find((n) => n.equip.indexOf(equipToken) >= 0) || null;
+}
+
+/** Equipment nodes matching the tokens recorded on a profile. */
+function equipmentNodesForProfile(equipmentTokens: string[]): EquipmentNode[] {
+  if (!equipmentTokens || !equipmentTokens.length) return [];
+  const out: EquipmentNode[] = [];
+  equipmentTokens.forEach((token) => {
+    const node = equipmentNodeForEquip(token);
+    if (node && out.indexOf(node) < 0) out.push(node);
+  });
+  return out;
+}
+
+/** Which equipment tokens are relevant for a sport's plan / progress tracking. */
+function equipmentScoreForSport(sportId: string, equipmentTokens: string[]): string[] {
+  const out = new Set<string>();
+  equipmentTokens.forEach((token) => {
+    const node = equipmentNodeForEquip(token);
+    if (!node) return;
+    if (sportId === "strength") {
+      if (node.group === "free-weights" || node.group === "rigs" || node.group === "machines") out.add(token);
+    } else if (sportId === "running") {
+      if (node.equip.indexOf("treadmills") >= 0 || node.equip.indexOf("jumpRope") >= 0 || node.equip.indexOf("weightBelt") >= 0 || node.equip.indexOf("weightedVest") >= 0 || node.group === "accessories") out.add(token);
+    } else if (sportId === "cycling") {
+      if (node.equip.indexOf("bicycle") >= 0 || node.equip.indexOf("spinBike") >= 0 || node.equip.indexOf("airBike") >= 0 || node.group === "cardio") out.add(token);
+    } else if (sportId === "rowing") {
+      if (node.equip.indexOf("rower") >= 0 || node.group === "cardio") out.add(token);
+    } else if (sportId === "elliptical") {
+      if (node.equip.indexOf("elliptical") >= 0 || node.group === "cardio") out.add(token);
+    } else if (sportId === "stair-climber") {
+      if (node.equip.indexOf("stairClimber") >= 0 || node.group === "cardio") out.add(token);
+    } else if (sportId === "ski-erg") {
+      if (node.equip.indexOf("skiErg") >= 0 || node.group === "cardio") out.add(token);
+    } else if (sportId === "hiking" || sportId === "walking" || sportId === "sprinting") {
+      if (node.equip.indexOf("treadmills") >= 0 || node.equip.indexOf("jumpRope") >= 0 || node.equip.indexOf("weightBelt") >= 0 || node.equip.indexOf("weightedVest") >= 0 || node.group === "accessories") out.add(token);
+    } else if (sportId === "boxing" || sportId === "mma" || sportId === "taekwondo" || sportId === "martial-arts") {
+      if (node.equip.indexOf("punchBag") >= 0 || node.equip.indexOf("assistBands") >= 0 || node.group === "accessories" || node.equip.indexOf("suspension") >= 0) out.add(token);
+    } else if (sportId === "calisthenics" || sportId === "hiit") {
+      if (node.group === "rigs" || node.group === "accessories" || node.equip.indexOf("bar") >= 0 || node.equip.indexOf("suspension") >= 0) out.add(token);
+    } else if (sportId === "yoga" || sportId === "pilates" || sportId === "stretching" || sportId === "mobility") {
+      if (node.group === "accessories" || node.equip.indexOf("yogaMat") >= 0 || node.equip.indexOf("foamRoller") >= 0 || node.equip.indexOf("massageBall") >= 0) out.add(token);
+    } else if (sportId === "golf" || sportId === "tennis" || sportId === "pickleball" || sportId === "team-sports") {
+      if (node.group === "cardio" || node.group === "accessories" || node.equip.indexOf("jumpRope") >= 0 || node.equip.indexOf("speedLadder") >= 0) out.add(token);
+    }
+  });
+  return Array.from(out);
+}
+
+/* ---------- Load profile & integrity ---------- */
+
+function loadProfileForExercise(profile: Profile | undefined, name: string): LoadProfileEntry | null {
+  const lp = (profile && profile.loadProfile) || {};
+  return lp[name] || null;
+}
+
+function loadProfileSet(profile: Profile | undefined, name: string, entry: LoadProfileEntry): void {
+  void profile;
+  void name;
+  void entry;
+}
+
+function latestTopSetLoad(_profile: Profile | undefined, name: string): number | null {
+  const state = getPlatformBindings().getState();
+  let best: number | null = null;
+  (state.log || []).filter((s) => s.sport === "strength").sort((a, b) => (a.startedAt < b.startedAt ? 1 : -1)).some((s) => {
+    const ex = (s.exercises || []).find((e) => e.name === name);
+    if (ex && ex.sets && ex.sets.length) {
+      const top = ex.sets.reduce((m, st) => (st.load || 0) > (m.load || 0) ? st : m, ex.sets[0]);
+      if (top.load && top.load > 0) best = top.load;
+    }
+    return best != null;
+  });
+  return best;
+}
+
+function suggestedLoadForExercise(profile: Profile | undefined, name: string): number | null {
+  const lp = loadProfileForExercise(profile, name);
+  const top = latestTopSetLoad(profile, name);
+  const base = lp && lp.loadKg != null ? lp.loadKg : top;
+  if (base == null) return null;
+  if (lp && lp.stalled) return base;
+  return Math.round(base * 1.025);
+}
+
+// ---- Integrity (anti-cheat-style review flags on logged sets) ----
+
+
+function integrityFlagForSet(set: LoggedSet | undefined, exerciseName: string): string | null {
+  void exerciseName;
+  if (!set || set.done === false) return null;
+  const load = set.load || 0;
+  const reps = set.reps != null ? set.reps : 0;
+  if (load <= 0 || reps <= 0) return "review";
+  if (reps > 60) return "review";
+  if (load > 999) return "review";
+  return "ok";
+}
+
+interface IntegritySummary {
+  reviewedCount: number;
+  flaggedCount: number;
+  flagReasons: string[];
+}
+
+function integritySummaryForSession(session: SessionLog | undefined): IntegritySummary | null {
+  if (!session || session.sport !== "strength") return null;
+  const reasons: string[] = [];
+  let reviewed = 0, flagged = 0;
+  (session.exercises || []).forEach((ex) => {
+    (ex.sets || []).forEach((st) => {
+      if (st.done === false) return;
+      reviewed++;
+      const flag = integrityFlagForSet(st, ex.name);
+      if (flag && flag !== "ok") {
+        flagged++;
+        reasons.push(ex.name + ": " + flag);
+      }
+    });
+  });
+  return { reviewedCount: reviewed, flaggedCount: flagged, flagReasons: reasons };
+}
+
+/** Anti-cheat: applied to a strength session right before persist. Never rewrites history; only flags rank-ineligible entries. */
+export interface IntegrityApplyResult {
+  reviewedCount: number;
+  flaggedCount: number;
+  flagReasons: string[];
+  rankEligible: boolean;
+}
+
+function integrityApplyToSession(session: SessionLog | undefined): IntegrityApplyResult | null {
+  if (!session || session.sport !== "strength") return null;
+  const reasons: string[] = [];
+  let flaggedCount = 0, reviewedCount = 0;
+  (session.exercises || []).forEach((ex) => {
+    if (!ex || !ex.sets) return;
+    ex.sets.forEach((st) => {
+      if (st.done === false) return;
+      reviewedCount++;
+      const flag = integrityFlagForSet(st, ex.name);
+      if (flag && flag !== "ok") {
+        flaggedCount++;
+        reasons.push(ex.name + ": " + flag);
+      }
+    });
+  });
+  return {
+    reviewedCount: reviewedCount,
+    flaggedCount: flaggedCount,
+    flagReasons: reasons,
+    rankEligible: flaggedCount === 0 && reviewedCount > 0
+  };
+}
+
+/** Scoring for the world leaderboard / personal ranking. Derived from real logged values only; 
+ * strength uses Epley-estimated 1RM (labeled as estimated everywhere shown). */
+function scoreForActivity(activity: ActivityInput | null | undefined): number | null {
+  if (!activity || !activity.sport) return null;
+  const sport = sportById(activity.sport);
+  if (!sport) return null;
+  if (activity.sport === "strength" && Array.isArray(activity.exercises)) {
+    let totalE1RM = 0, topE1RM = 0;
+    activity.exercises.forEach((ex) => {
+      if (!ex || !ex.sets) return;
+      ex.sets.forEach((st: LoggedSet) => {
+        if (st.done === false) return;
+        const load = st.load || 0;
+        const reps = st.reps || 0;
+        if (load <= 0 || reps <= 0) return;
+        const e1rm = est1RM(load, reps);
+        totalE1RM += e1rm;
+        if (e1rm > topE1RM) topE1RM = e1rm;
+      });
+    });
+    if (topE1RM <= 0) return null;
+    return Math.round(topE1RM * (1 + Math.min(20, totalE1RM / 1000)));
+  }
+  if (sport.metrics.indexOf("distanceM") >= 0 && typeof activity.distanceM === "number" && typeof activity.durationSec === "number") {
+    const distKm = activity.distanceM / 1000;
+    if (distKm <= 0) return null;
+    const paceSecPerKm = activity.durationSec / distKm;
+    if (!isFinite(paceSecPerKm) || paceSecPerKm <= 0) return null;
+    const paceFactor = Math.max(0.5, 600 / paceSecPerKm);
+    return Math.round(distKm * 100 * paceFactor);
+  }
+  if (sport.group === "combat" && typeof activity.effort === "number" && activity.effort >= 1 && activity.effort <= 10) {
+    const rounds = typeof activity.rounds === "number" && activity.rounds > 0 ? activity.rounds : 1;
+    const roundDur = typeof activity.roundDurationSec === "number" && activity.roundDurationSec > 0 ? activity.roundDurationSec : 90;
+    return Math.round(rounds * roundDur * activity.effort / 60);
+  }
+  if (sport.group === "racket" && typeof activity.effort === "number" && activity.effort >= 1 && activity.effort <= 10) {
+    const setsWon = typeof activity.setsWon === "number" && activity.setsWon > 0 ? activity.setsWon : 0;
+    const base = Math.round((activity.durationSec || 0) / 60 * activity.effort);
+    return Math.round(base + setsWon * 60);
+  }
+  if (sport.group === "precision") {
+    if (sport.id === "golf" && typeof activity.holes === "number" && typeof activity.strokes === "number" && activity.holes > 0) {
+      return Math.max(0, Math.round((activity.holes * 3 * 100 / Math.max(1, activity.strokes)) * (activity.effort || 5) / 5));
+    }
+    if (sport.id === "archery" && typeof activity.arrows === "number" && activity.arrows > 0 && typeof activity.score === "number") {
+      return Math.round(activity.score * 10 * (activity.effort || 5) / 5);
+    }
+  }
+  if (sport.group === "team" && typeof activity.effort === "number" && activity.effort >= 1 && activity.effort <= 10) {
+    const resultScore = typeof activity.result === "number" ? activity.result : 0;
+    return Math.round(resultScore * 10 + (activity.durationSec || 0) / 60 * activity.effort);
+  }
+  if (typeof activity.effort === "number" && activity.effort >= 1 && activity.effort <= 10 && typeof activity.durationSec === "number") {
+    return Math.round((activity.durationSec / 60) * activity.effort);
+  }
+  return null;
+}
+
+/** Only sessions that are rank-eligible contribute to the leaderboard and personal top-athlete summary. */
+function rankEligibleSession(session: SessionLog | undefined): boolean | null {
+  if (!session || session.sport === "strength") {
+    const a = integrityApplyToSession(session);
+    return a ? a.rankEligible : null;
+  }
+  const s = scoreForActivity(session);
+  return s != null && s > 0;
+}
+
+/* ---------- Recovery & fueling pillars ---------- */
+
+/** Calendar day an entry belongs to, in the athlete's local time.
+   A date-only string ("2026-10-18") is already a calendar day and passes through;
+   a full timestamp is converted, because slicing its UTC text put a 9 pm Mexico City
+   meal on the next day — and disagreed with the local date the store stamps onto meals.
+   */
+function logToDate(iso: string | null | undefined): string | null {
+  if (!iso || typeof iso !== "string") return null;
+  const m = /^(\d{4}-\d{2}-\d{2})/.exec(iso);
+  if (!m) return null;
+  if (iso.length <= 10) return m[1];
+  const dt = new Date(iso);
+  if (isNaN(dt.getTime())) return m[1];
+  return dt.getFullYear() + "-" + pad2(dt.getMonth() + 1) + "-" + pad2(dt.getDate());
+}
 
 function sportById(id: string): SportDef | null {
   return SPORTS.find(function (s) { return s.id === id; }) || null;
@@ -980,6 +1386,10 @@ export interface ActivityInput {
   opponent?: string | null;
   result?: string | null;
   effort?: number | null;
+  style?: string | null;
+  focus?: string | null;
+  name?: string | null;
+  stairs?: number | null;
   [key: string]: unknown;
 }
 
@@ -1073,23 +1483,7 @@ function validateActivity(activity: ActivityInput | null | undefined): { ok: boo
    Mirrors js/domain.js exactly. Every value is derived from user entries; the
    meal figures stay explicitly labeled as user-entered estimates. */
 
-/**
- * Calendar day an entry belongs to, in the athlete's local time (mirrors
- * js/domain.js). Date-only strings pass through; full timestamps are converted
- * so an evening entry is not pushed onto the next day by its UTC text.
- */
-function logToDate(iso?: string | null): string | null {
-  if (!iso || typeof iso !== "string") return null;
-  const m = /^(\d{4}-\d{2}-\d{2})/.exec(iso);
-  if (!m) return null;
-  if (iso.length <= 10) return m[1];
-  const dt = new Date(iso);
-  if (isNaN(dt.getTime())) return m[1];
-  return dt.getFullYear() + "-" + pad2(dt.getMonth() + 1) + "-" + pad2(dt.getDate());
-}
-
-/** Ordered daily aggregate for the last `weeks` weeks ending today. */
-function recoverySeries(state: AppState, weeks?: number): RecoveryDay[] {
+/** Ordered daily aggregate for the last `weeks` weeks ending today. */function recoverySeries(state: AppState, weeks?: number): RecoveryDay[] {
   const count = weeks || 4;
   const out: RecoveryDay[] = [];
   const today = new Date();
@@ -1105,19 +1499,85 @@ function recoverySeries(state: AppState, weeks?: number): RecoveryDay[] {
       const date = day.getFullYear() + "-" + pad2(day.getMonth() + 1) + "-" + pad2(day.getDate());
       const r = (state.readiness || []).find(function (x) { return x.date === date; });
       const h = (state.hydration || []).find(function (x) { return x.date === date; });
-      const mealCount = meals.filter(function (m) { return logToDate(m.time) === date; }).length;
-      const trained = (state.log || []).some(function (s) { return logToDate(s.startedAt) === date; });
+      const dayMeals = meals.filter(function (m) { return logToDate(m.time) === date; }).length;
+      const hasStrengthOrMixed = (state.log || []).some(function (s) {
+        const sDate = logToDate(s.startedAt);
+        if (sDate !== date) return false;
+        if (s.sport) return s.sport !== "" && s.sport !== null && s.sport !== undefined;
+        if (Array.isArray(s.exercises)) {
+          return s.exercises.some(function (e) { return e && e.sets && e.sets.some(function (set) { return Array.isArray(set) && set.length && (typeof set[0] === "number" || set[0] && set[0].reps != null || set[0] && set[0].load != null); }); });
+        }
+        return false;
+      });
       out.push({
         date: date,
         weekday: DAY_ORDER[day.getDay() === 0 ? 6 : day.getDay() - 1],
-        rest: !trained,
+        rest: !hasStrengthOrMixed,
         readiness: r ? { energy: r.energy, soreness: r.soreness } : null,
         hydration: h ? h.ml : null,
-        meals: mealCount
+        meals: dayMeals
       });
     }
   }
   return out;
+}
+
+/* ---------- Formatting ---------- */
+
+function fmt(n: number | null | undefined): string {
+  if (n === null || n === undefined || isNaN(n)) return "—";
+  return Math.round(n).toLocaleString("en-US");
+}
+
+function fmtPace(secPerKm: number): string {
+  if (!isFinite(secPerKm) || secPerKm <= 0) return "—";
+  const m = Math.floor(secPerKm / 60);
+  const s = Math.round(secPerKm % 60);
+  return m + ":" + (s < 10 ? "0" : "") + s;
+}
+
+function fmtDur(sec: number): string {
+  if (!sec && sec !== 0) return "—";
+  const h = Math.floor(sec / 3600);
+  const a = Math.floor((sec % 3600) / 60);
+  const b = Math.floor(sec % 60);
+  if (h > 0) return h + ":" + (a < 10 ? "0" : "") + a + ":" + (b < 10 ? "0" : "") + b;
+  return a + ":" + (b < 10 ? "0" : "") + b;
+}
+
+function fmtDurHuman(sec: number): string {
+  const m = Math.round(sec / 60);
+  if (m < 60) return m + " min";
+  return Math.floor(m / 60) + "h " + (m % 60) + "m";
+}
+
+function fmtDist(m: number | null | undefined, unit?: string): string {
+  if (!m && m !== 0) return "—";
+  if (unit === "imperial") return (m / 1609.34).toFixed(2) + " mi";
+  return (m / 1000).toFixed(2) + " km";
+}
+
+function fmtDate(iso: string | null | undefined): string {
+  if (!iso) return "—";
+  const d = new Date(iso);
+  return d.toLocaleDateString("en-US", { month: "short", day: "numeric" });
+}
+
+function fmtDateFull(iso: string | null | undefined): string {
+  if (!iso) return "—";
+  const d = new Date(iso);
+  return d.toLocaleDateString("en-US", { weekday: "short", month: "short", day: "numeric" });
+}
+
+function relDay(iso: string | null | undefined): string {
+  if (!iso) return "—";
+  const d = new Date(iso);
+  const now = new Date();
+  const diff = Math.round((new Date(now.toDateString()).getTime() - new Date(d.toDateString()).getTime()) / 86400000);
+  if (diff === 0) return "Today";
+  if (diff === 1) return "Yesterday";
+  if (diff < 7) return diff + " days ago";
+  return fmtDate(iso);
 }
 
 /** Plain recommendation, not a medical judgment. */
@@ -1203,61 +1663,6 @@ function resumeSession(session: ClockState, nowMs?: number, idleFreezeMs?: numbe
   return { session: s, frozen: true };
 }
 
-/* ---------- Formatting ---------- */
-
-function fmt(n?: number | null): string {
-  if (n === null || n === undefined || isNaN(n)) return "—";
-  return Math.round(n).toLocaleString("en-US");
-}
-
-function fmtPace(secPerKm: number): string {
-  if (!isFinite(secPerKm) || secPerKm <= 0) return "—";
-  const m = Math.floor(secPerKm / 60);
-  const s = Math.round(secPerKm % 60);
-  return m + ":" + (s < 10 ? "0" : "") + s;
-}
-
-function fmtDur(sec?: number | null): string {
-  if (sec === undefined || sec === null || isNaN(sec)) return "—";
-  const h = Math.floor(sec / 3600);
-  const m = Math.floor((sec % 3600) / 60);
-  const s = Math.floor(sec % 60);
-  if (h > 0) return h + ":" + (m < 10 ? "0" : "") + m + ":" + (s < 10 ? "0" : "") + s;
-  return m + ":" + (s < 10 ? "0" : "") + s;
-}
-
-function fmtDurHuman(sec?: number | null): string {
-  const m = Math.round((sec || 0) / 60);
-  if (m < 60) return m + " min";
-  return Math.floor(m / 60) + "h " + (m % 60) + "m";
-}
-
-function fmtDist(m?: number | null, unit?: string): string {
-  if (!m && m !== 0) return "—";
-  if (unit === "imperial") return ((m as number) / 1609.34).toFixed(2) + " mi";
-  return ((m as number) / 1000).toFixed(2) + " km";
-}
-
-function fmtDate(iso: string): string {
-  const d = new Date(iso);
-  return d.toLocaleDateString("en-US", { month: "short", day: "numeric" });
-}
-
-function fmtDateFull(iso: string): string {
-  const d = new Date(iso);
-  return d.toLocaleDateString("en-US", { weekday: "short", month: "short", day: "numeric" });
-}
-
-function relDay(iso: string): string {
-  const d = new Date(iso);
-  const now = new Date();
-  const diff = Math.round((new Date(now.toDateString()).getTime() - new Date(d.toDateString()).getTime()) / 86400000);
-  if (diff === 0) return "Today";
-  if (diff === 1) return "Yesterday";
-  if (diff < 7) return diff + " days ago";
-  return fmtDate(iso);
-}
-
 export {
   DAY_ORDER,
   METRICS,
@@ -1301,5 +1706,19 @@ export {
   fmtDist,
   fmtDate,
   fmtDateFull,
-  relDay
+  relDay,
+  latestTopSetLoad,
+  suggestedLoadForExercise,
+  loadProfileForExercise,
+  loadProfileSet,
+  integrityFlagForSet,
+  integritySummaryForSession,
+  integrityApplyToSession,
+  scoreForActivity,
+  rankEligibleSession,
+  depthOfSport,
+  machinesForSport,
+  equipmentNodeForEquip,
+  equipmentNodesForProfile,
+  equipmentScoreForSport
 };

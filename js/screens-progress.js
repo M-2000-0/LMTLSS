@@ -12,10 +12,11 @@
     const screen = el("div", { class: "screen" });
 
     screen.appendChild(el("div", { class: "screen-head" }, [
-      el("div", {}, [
+      el("div", { class: "brand-group" }, [
         el("h1", { class: "screen-title", text: "Progress" }),
         el("p", { class: "screen-sub", text: "Your records and trends — measured from what you logged." })
-      ])
+      ]),
+      UI.logo(40)
     ]));
 
     const log = state.log || [];

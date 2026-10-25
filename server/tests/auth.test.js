@@ -14,7 +14,7 @@ test("health endpoint reports the applied schema version", async () => {
   const res = await call(h, "GET", "/api/health");
   assert.equal(res.status, 200);
   assert.equal(res.body.ok, true);
-  assert.equal(res.body.schemaMigrations, 1);
+  assert.equal(res.body.schemaMigrations, 2);
 });
 
 test("public discovery works without a token", async () => {

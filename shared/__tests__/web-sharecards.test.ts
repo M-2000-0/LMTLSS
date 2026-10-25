@@ -104,9 +104,14 @@ describe("share cards (js/sharecards.js)", () => {
     const svg = ShareCards.toSVG(runCard, {});
 
     // Honesty: no coordinates means no fabricated route line.
-    expect(svg).not.toContain("<path");
+    // The logo pill on the card header is static brand SVG with its own
+    // decorative <path> (pill end cap), so check for the route path
+    // signature specifically — not for any <path> at all.
+    expect(svg).not.toContain('stroke="#61EB1A" stroke-width="10"');
     expect(svg).toContain("LMTLSS");
     expect(svg).toContain("no GPS connected");
+    expect(svg).toContain('<g transform="translate(940,118)"');
+    expect(svg).toContain('id="pillBody"');
 
     // Security: titles are XML-escaped, never injected as markup.
     const evil = ShareCards.composeCard(

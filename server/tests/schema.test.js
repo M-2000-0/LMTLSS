@@ -11,8 +11,11 @@ import assert from "node:assert/strict";
 import { readFile } from "node:fs/promises";
 import { DatabaseSync } from "node:sqlite";
 import { createNodeDb } from "../src/db.js";
-import { ensureSchema, splitStatements, MIGRATIONS, SCHEMA_DIR } from "../src/migrate.js";
-import { join } from "node:path";
+import { ensureSchema, splitStatements, MIGRATIONS } from "../src/migrate.js";
+import { dirname, join } from "node:path";
+import { fileURLToPath } from "node:url";
+
+const SCHEMA_DIR = join(dirname(fileURLToPath(import.meta.url)), "..", "schema");
 
 const EXPECTED_TABLES = [
   "users", "profiles", "athlete_sports", "activities", "personal_records", "goals",
@@ -22,7 +25,8 @@ const EXPECTED_TABLES = [
   "subscriptions", "webhook_events",
   "products", "product_variants", "carts", "cart_items", "orders", "order_items",
   "facilities", "location_prefs", "location_shares",
-  "reports", "moderation_actions", "notifications", "rate_counters"
+  "reports", "moderation_actions", "notifications", "rate_counters",
+  "auth_identities", "sessions", "email_codes", "consents"
 ];
 
 async function freshDb() {
@@ -33,11 +37,20 @@ async function freshDb() {
 test("migrations apply once and applying them again is a no-op", async () => {
   const db = await freshDb();
   const first = await ensureSchema(db);
-  assert.deepEqual(first, ["0001_init"]);
+  assert.deepEqual(first, ["0001_init", "0002_auth"]);
   const second = await ensureSchema(db);
   assert.deepEqual(second, [], "a second boot must not re-run anything");
   const rows = await db.all("SELECT version FROM schema_migrations ORDER BY version");
-  assert.deepEqual(rows.map(function (r) { return r.version; }), [1]);
+  assert.deepEqual(rows.map(function (r) { return r.version; }), [1, 2]);
+});
+
+test("the inlined SQL matches the .sql sources", async () => {
+  // The Worker has no filesystem, so migrations are inlined at build time.
+  // If this fails, run `node scripts/build-schema.mjs` from server/.
+  for (const migration of MIGRATIONS) {
+    const text = (await readFile(join(SCHEMA_DIR, migration.file), "utf8")).replace(/\r\n/g, "\n");
+    assert.equal(migration.sql, text, migration.file + " has drifted from src/schema-sql.js");
+  }
 });
 
 test("every table the API depends on exists after migration", async () => {

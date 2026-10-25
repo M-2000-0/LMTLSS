@@ -184,7 +184,7 @@ Indexes: `activities(user_id, started_at DESC)`, partial on `deleted_at IS NULL`
 | Degradation | UI states one of: `GPS active` / `GPS weak (n fixes/min)` / `time only`. Permission denied or revoked → time-only mode with explanation, session continues |
 | Battery | Auto-pause when stationary; adaptive sampling; no high-accuracy mode when route recording is off |
 | Recording service | Shared interface + platform impls; **local point buffering during the run** (network loss must not destroy it); noise/invalid-point filtering before distance/pace math; dedupe keys prevent duplicate activity records on sync retries |
-| Route rendering | Licensed mapping solution behind a documented adapter (verify tile/data costs and licensing — "free library ≠ free map data"); routes render **only actual recorded coordinates** — never fabricated |
+| Route rendering | Licensed mapping solution behind a documented adapter (verify tile/data costs and licensing — "free library ≠ free map data"); routes render **only actual recorded coordinates** — never fabricated. **Decided 2026-10-19: MapLibre RN + OpenFreeMap** — see [MAP-ADAPTER-DECISION](MAP-ADAPTER-DECISION.md) |
 | Validation | Timestamps monotonic; coordinates sanity-checked (speed/altitude bounds); distance recomputed server-side from track; mismatch flags record for review |
 | Honesty | Never promise uninterrupted tracking on every device/OS setting |
 

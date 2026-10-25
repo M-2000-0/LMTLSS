@@ -105,12 +105,21 @@
         ])
       ]),
       el("div", { class: "divider my-3" }),
-      el("div", {}, [
-        el("div", { class: "metric-label", text: "Readiness today" }),
-        today.readiness
-          ? el("div", { class: "metric-small num", style: "font-weight:700", text: today.readiness.energy.toFixed(1) + " / " + today.readiness.soreness.toFixed(1) + " soreness" })
-          : el("div", { class: "metric-small num muted-2", text: "— not logged" })
+      el("div", { class: "row-between mb-3" }, [
+        el("div", {}, [
+          el("div", { class: "metric-label", text: "Energy today" }),
+          today.readiness
+            ? el("div", { class: "metric-small num", style: "font-weight:700", text: today.readiness.energy.toFixed(1) + " / 5" })
+            : el("div", { class: "metric-small num muted-2", text: "— not logged" })
+        ]),
+        el("div", {}, [
+          el("div", { class: "metric-label", text: "Soreness today" }),
+          today.readiness && typeof today.readiness.soreness === "number"
+            ? el("div", { class: "metric-small num", style: "font-weight:700", text: today.readiness.soreness.toFixed(1) + " / 5" })
+            : el("div", { class: "metric-small num muted-2", text: "— not logged" })
+        ])
       ]),
+      el("p", { class: "micro muted-2 mt-2", text: "Self-rated, not a measured value." }),
       el("p", { class: "small muted mt-4", text: rec.suggestion }),
       el("p", { class: "micro muted-2 mt-2", text: rec.why }),
       el("p", { class: "micro muted-2 mt-2", text: rec.source })

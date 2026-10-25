@@ -190,4 +190,35 @@ describe('app store', () => {
     expect(snapshot.ready).toBe(true);
     expect(snapshot.quarantine).toBe('written by a newer version (v2)');
   });
+
+  it('imports a workout once, dedupes a repeat, and persists device provenance', async () => {
+    const storage = memoryStorage();
+    const store = createAppStore(storage, () => DAY);
+    await store.hydrate();
+
+    const workout = {
+      provider: 'file_import' as const,
+      externalId: 'gpx:1792485600:600:0.22',
+      activityType: 'running',
+      startedAt: '2026-10-20T06:00:00.000Z',
+      durationSec: 600,
+      distanceM: 222.4,
+    };
+
+    const first = store.importWorkouts([workout], '2026-10-20T07:00:00.000Z');
+    expect(first.accepted).toHaveLength(1);
+    expect(first.duplicates).toEqual([]);
+    expect(first.accepted[0].provenance).toBe('device');
+    expect(first.accepted[0].source).toBe('file_import');
+    expect(store.getSnapshot().state.log).toHaveLength(1);
+
+    await store.whenIdle();
+    expect(storage.raw()).toContain('"provenance":"device"');
+
+    const second = store.importWorkouts([workout], '2026-10-20T07:05:00.000Z');
+    expect(second.accepted).toHaveLength(0);
+    expect(second.duplicates).toHaveLength(1);
+    expect(second.duplicates[0].kind).toBe('external-id');
+    expect(store.getSnapshot().state.log).toHaveLength(1);
+  });
 });

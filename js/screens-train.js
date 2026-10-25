@@ -716,25 +716,37 @@
       }
     }
 
-    /* Distance entry — manual, honestly labeled */
+    /* Distance entry — manual, honestly labeled. Offered for every timed
+       endurance sport (run, cycle, swim); distance units differ by sport. */
+    const distUnit = session.sport === "swimming" ? "m" : "km";
+    const distStep = session.sport === "swimming" ? "10" : "0.1";
+    const distLabel = session.sport === "swimming"
+      ? "Distance in meters"
+      : "Distance in kilometers";
+    const distValue = session.distanceM ? (session.sport === "swimming" ? String(session.distanceM) : (session.distanceM / 1000).toFixed(2)) : "";
+    const distConvert = session.sport === "swimming"
+      ? function (v) { session.distanceM = v; }
+      : function (v) { session.distanceM = v * 1000; };
+
     inner.appendChild(el("div", { class: "card mt-6" }, [
       el("div", { class: "eyebrow mb-2", text: "Distance" }),
       el("p", { class: "small muted mb-3", text: "No GPS is connected. Enter distance now or when you finish — it will be labeled as manually entered." }),
       el("div", { class: "row" }, [
         el("input", {
-          class: "input input-num", type: "number", step: "0.1", min: "0",
+          class: "input input-num", type: "number", step: distStep, min: "0",
           inputmode: "decimal",
-          "aria-label": "Distance in kilometers",
-          value: session.distanceM ? (session.distanceM / 1000).toFixed(2) : "",
+          "aria-label": distLabel,
+          value: distValue,
           oninput: function (e) {
             const v = parseFloat(e.target.value);
-            session.distanceM = isNaN(v) ? null : v * 1000;
+            const raw = isNaN(v) ? null : v;
+            distConvert(raw);
             session.distanceSource = "manual";
             Store.saveActive(session);
             updateRunStats();
           }
         }),
-        el("span", { class: "muted", style: "font-weight:600", text: "km" })
+        el("span", { class: "muted", style: "font-weight:600", text: distUnit })
       ])
     ]));
 
@@ -743,9 +755,15 @@
     wrap.appendChild(dock([
       el("button", {
         class: "btn btn-primary btn-lg btn-block",
-        onclick: function () { finishRunning(ctx); }
-      }, [UI.icon("check"), "Finish run"])
+        onclick: function () { finishTimedSport(ctx); }
+      }, [UI.icon("check"), finishLabel()])
     ]));
+  }
+
+  function finishLabel() {
+    return session.sport === "cycling" ? "Finish ride" 
+      : session.sport === "swimming" ? "Finish swim" 
+      : "Finish run";
   }
 
   /* ---------- Shared live-session chrome ---------- */
@@ -789,7 +807,7 @@
     if (paceNode) {
       const elapsed = liveElapsed();
       paceNode.textContent = session.distanceM && elapsed > 5
-        ? Domain.fmtPace(elapsed / (session.distanceM / 1000))
+        ? paceValue(elapsed, session.distanceM, session.sport)
         : "—";
     }
     if (session.intervalTemplate && session.intervalTemplate.segments.length) {
@@ -911,6 +929,70 @@
     body.push(el("button", { class: "btn btn-ghost btn-block mt-3", text: "Keep logging", onclick: UI.closeSheet }));
 
     UI.sheet("Finish session", body);
+  }
+
+  function finishTimedSport(ctx) {
+    // Delegates to finishRunning for runs (which may carry interval templates)
+    // and to a simpler finish for cycling/swimming, which have no interval model today.
+    if (session.sport === "running") { finishRunning(ctx); return; }
+    finishSimpleTimedSport(ctx);
+  }
+
+  function finishSimpleTimedSport(ctx) {
+    const elapsed = liveElapsed();
+    if (elapsed < 30) {
+      UI.toast(session.sport + " session is under 30 seconds — keep going or discard.", { error: true });
+      return;
+    }
+    const body = [];
+    if (!session.distanceM) {
+      body.push(el("label", { class: "field mb-4" }, [
+        el("span", { class: "field-label", text: "Distance (" + (session.sport === "swimming" ? "meters" : "km") + ") — optional" }),
+        (function () {
+          const i = el("input", { class: "input input-num", type: "number", step: session.sport === "swimming" ? "10" : "0.1", min: "0", inputmode: "decimal", "aria-label": "Final distance" });
+          i.addEventListener("change", function () {
+            const v = parseFloat(i.value);
+            const raw = isNaN(v) ? null : v;
+            session.distanceM = session.sport === "swimming" ? raw : (raw != null ? raw * 1000 : null);
+            session.distanceSource = "manual";
+          });
+          return i;
+        })()
+      ]));
+    }
+    body.push(el("div", { class: "card mb-4" }, [
+      el("div", { class: "stat-pair" }, [
+        el("div", {}, [el("div", { class: "metric-label", text: "Time" }), el("div", { class: "metric-small num", style: "font-weight:700", text: Domain.fmtDur(elapsed) })]),
+        el("div", {}, [el("div", { class: "metric-label", text: "Distance" }), el("div", { class: "metric-small num", style: "font-weight:700", text: session.distanceM ? Domain.fmtDist(session.distanceM, (Store.get().settings || {}).unit) : "—" })]),
+        el("div", {}, [el("div", { class: "metric-label", text: session.sport === "cycling" ? "Speed" : "Pace" }), el("div", { class: "metric-small num", style: "font-weight:700", text: paceValue(elapsed, session.distanceM, session.sport) })])
+      ]),
+      el("p", { class: "micro muted-2 mt-3", text: session.distanceM ? "Distance source: manually entered (no GPS connected)." : "No distance recorded — it will be saved as time only." })
+    ]));
+
+    const notes = el("textarea", { class: "input", placeholder: "Route, conditions, how it felt…", "aria-label": "Notes" });
+    body.push(el("label", { class: "field" }, [el("span", { class: "field-label", text: "Notes (optional)" }), notes]));
+
+    body.push(el("button", {
+      class: "btn btn-primary btn-lg btn-block mt-6",
+      onclick: function () {
+        completeSession({
+          sport: session.sport,
+          title: session.title,
+          planId: session.planId || undefined,
+          startedAt: session.startedAt,
+          durationSec: elapsed,
+          distanceM: session.distanceM,
+          distanceSource: session.distanceM ? "manual" : null,
+          notes: notes.value || "",
+          exercises: [],
+          provenance: "manual"
+        }, ctx, 1);
+      }
+    }, [UI.icon("check"), "Save " + session.title.toLowerCase()]));
+
+    body.push(el("button", { class: "btn btn-ghost btn-block mt-3", text: "Keep going", onclick: UI.closeSheet }));
+
+    UI.sheet("Finish " + session.title.toLowerCase(), body);
   }
 
   function finishRunning(ctx) {
@@ -1093,9 +1175,17 @@
         ]));
         nodes.push(el("p", { class: "small muted mb-4", text: "Interval splits come from the segments you completed during this run. Plan time is total target across all segments." }));
       }
+    } else if (s.sport === "cycling" || s.sport === "swimming") {
+      // Timed endurance sports: clock-measured time, optional manual distance.
+      nodes.push(el("div", { class: "stat-pair mb-4" }, [
+        el("div", {}, [el("div", { class: "metric-label", text: "Time" }), el("div", { class: "metric-small num", style: "font-weight:700", text: Domain.fmtDur(s.durationSec) })]),
+        el("div", {}, [el("div", { class: "metric-label", text: "Distance" }), el("div", { class: "metric-small num", style: "font-weight:700", text: s.distanceM ? Domain.fmtDist(s.distanceM, unit) : "—" })]),
+        el("div", {}, [el("div", { class: "metric-label", text: s.sport === "cycling" ? "Speed" : "Pace" }), el("div", { class: "metric-small num", style: "font-weight:700", text: s.distanceM ? paceValue(s.durationSec, s.distanceM, s.sport) : "—" })])
+      ]));
+      nodes.push(el("p", { class: "micro muted-2 mb-4", text: s.distanceM ? "Distance source: manually entered (no GPS connected)." : "No distance recorded — saved as time only." }));
     } else {
-      /* Every other sport renders exactly the metrics it recorded — nothing
-         is defaulted in to fill the row. */
+      /* Sports outside strength/running/cycling/swimming: render exactly the
+         metrics recorded — nothing invented. These are not measured by LMTLSS. */
       const metrics = Domain.activityMetrics(s, unit);
       if (metrics.length) {
         nodes.push(el("div", { class: "stat-pair mb-4" }, metrics.slice(0, 3).map(function (m) {
@@ -1137,6 +1227,7 @@
 
   function teardown() {
     stopTicker();
+    stopRest();
   }
 
   window.TrainScreen = { render: render, teardown: teardown };

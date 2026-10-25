@@ -22,8 +22,9 @@ import { ensureSchema } from "./migrate.js";
 import communities from "./routes/communities.js";
 import events from "./routes/events.js";
 import identity from "./routes/identity.js";
+import auth from "./routes/auth.js";
 
-const ROUTES = [].concat(communities.routes, events.routes, identity.routes);
+const ROUTES = [].concat(auth.routes, communities.routes, events.routes, identity.routes);
 
 const MAX_BODY_BYTES = 64 * 1024;
 

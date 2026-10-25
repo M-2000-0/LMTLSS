@@ -18,7 +18,14 @@ import type {
   Profile,
   ReadinessEntry,
 } from '../../../shared/src/types';
-import { planFor, setPlatformBindings, todayISO } from '../domain';
+import {
+  planFor,
+  planImport,
+  setPlatformBindings,
+  todayISO,
+  type ExternalWorkout,
+  type ImportPlan,
+} from '../domain';
 import { emptyState } from './schema';
 import { asyncStorageAdapter, type LoadResult, type StoreStorage } from './storage';
 
@@ -57,6 +64,8 @@ export interface AppStore {
   completeOnboarding(input: OnboardingInput): void;
   logReadiness(input: ReadinessInput): void;
   addHydration(ml: number): void;
+  /** Validate, dedupe, and append imported workouts. Returns what was skipped. */
+  importWorkouts(workouts: readonly ExternalWorkout[], importedAt?: string): ImportPlan;
 }
 
 export function createAppStore(storage: StoreStorage, clock: () => string = todayISO): AppStore {
@@ -168,6 +177,23 @@ export function createAppStore(storage: StoreStorage, clock: () => string = toda
     });
   }
 
+  /* The plan is computed before the update so the screen can report exactly
+     what was skipped. Only accepted sessions reach state, and the store never
+     invents one: validation and provenance live in the shared domain. */
+  function importWorkouts(
+    workouts: readonly ExternalWorkout[],
+    importedAt: string = new Date().toISOString(),
+  ): ImportPlan {
+    const plan = planImport(workouts, snapshot.state.log ?? [], importedAt);
+    if (plan.accepted.length > 0) {
+      update((state) => ({
+        ...state,
+        log: [...(state.log ?? []), ...plan.accepted],
+      }));
+    }
+    return plan;
+  }
+
   return {
     getSnapshot: () => snapshot,
     subscribe(listener) {
@@ -181,6 +207,7 @@ export function createAppStore(storage: StoreStorage, clock: () => string = toda
     completeOnboarding,
     logReadiness,
     addHydration,
+    importWorkouts,
   };
 }
 

@@ -16,10 +16,11 @@
     const hour = new Date().getHours();
     const greet = hour < 5 ? "Training late" : hour < 12 ? "Good morning" : hour < 18 ? "Good afternoon" : "Good evening";
     screen.appendChild(el("div", { class: "screen-head" }, [
-      el("div", {}, [
+      el("div", { class: "brand-group" }, [
         el("h1", { class: "screen-title", text: greet + (profile && profile.name ? ", " + profile.name : "") }),
         el("p", { class: "screen-sub", text: Domain.fmtDateFull(new Date().toISOString()) })
-      ])
+      ]),
+      UI.logo(40)
     ]));
 
     /* 0. Adaptive week — explainable suggestions or applied changes */
@@ -78,12 +79,18 @@
       const thisWeek = series[series.length - 1] || { sets: 0, runM: 0 };
       const lastWeek = series[series.length - 2] || { sets: 0, runM: 0 };
 
+      // Use the same Mon-based week basis as the weeklyVolumeSeries sparkline,
+      // so the headline number and the sparkline agree.
+      const ws = Domain.weekStartISO();
+      const wsMs = new Date(ws + "T00:00:00").getTime();
+      const prevWsMs = wsMs - 7 * 86400000;
       const sessionsThisWeek = log.filter(function (s) {
-        return Date.now() - new Date(s.startedAt).getTime() < 7 * 86400000;
+        const t = new Date(s.startedAt).getTime();
+        return t >= wsMs && t < wsMs + 7 * 86400000;
       }).length;
       const sessionsLastWeek = log.filter(function (s) {
-        const age = Date.now() - new Date(s.startedAt).getTime();
-        return age >= 7 * 86400000 && age < 14 * 86400000;
+        const t = new Date(s.startedAt).getTime();
+        return t >= prevWsMs && t < wsMs;
       }).length;
 
       screen.appendChild(el("div", { class: "section" }, [

@@ -13,6 +13,15 @@
 --   * Sports are an open vocabulary (TEXT), validated against the shared sport
 --     model, so adding a sport never needs a migration.
 
+-- The migration ledger exists in the .sql file as well as in migrate.js so a
+-- database migrated by `wrangler d1 migrations apply` is recognised by the
+-- Worker migrator instead of being re-run.
+CREATE TABLE IF NOT EXISTS schema_migrations (
+  version    INTEGER PRIMARY KEY,
+  name       TEXT NOT NULL,
+  applied_at TEXT NOT NULL
+);
+
 CREATE TABLE users (
   id            TEXT PRIMARY KEY,
   auth_provider TEXT NOT NULL,
@@ -427,3 +436,6 @@ CREATE TABLE rate_counters (
   count        INTEGER NOT NULL,
   PRIMARY KEY (bucket_key, window_start)
 );
+
+INSERT OR IGNORE INTO schema_migrations (version, name, applied_at)
+VALUES (1, '0001_init', strftime('%Y-%m-%dT%H:%M:%fZ', 'now'));

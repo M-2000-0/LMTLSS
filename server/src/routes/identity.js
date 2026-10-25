@@ -284,11 +284,15 @@ const routes = [
         { sql: "DELETE FROM athlete_sports WHERE user_id = ?", params: [userId] },
         { sql: "DELETE FROM notifications WHERE user_id = ?", params: [userId] },
         { sql: "DELETE FROM carts WHERE user_id = ?", params: [userId] },
+        { sql: "DELETE FROM sessions WHERE user_id = ?", params: [userId] },
+        { sql: "DELETE FROM auth_identities WHERE user_id = ?", params: [userId] },
+        { sql: "DELETE FROM consents WHERE user_id = ?", params: [userId] },
+        { sql: "DELETE FROM email_codes WHERE email = ?", params: [ctx.user.email || ""] },
         { sql: "UPDATE community_members SET status = 'banned' WHERE user_id = ?", params: [userId] },
         { sql: "UPDATE profiles SET display_name = '', bio = '', city = '', area_label = '', avatar_url = '', " +
                "public_workouts = 0, show_communities = 0, show_events = 0, updated_at = ? WHERE user_id = ?", params: [at, userId] },
         { sql: "UPDATE activities SET visibility = 'private', notes = '' WHERE user_id = ?", params: [userId] },
-        { sql: "UPDATE users SET deleted_at = ?, email = NULL WHERE id = ?", params: [at, userId] }
+        { sql: "UPDATE users SET deleted_at = ?, email = NULL, password_hash = NULL WHERE id = ?", params: [at, userId] }
       ]);
       return json({ deleted: true, deletedAt: at });
     }

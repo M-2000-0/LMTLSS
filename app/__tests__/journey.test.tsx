@@ -9,6 +9,11 @@ import AsyncStorage from '@react-native-async-storage/async-storage';
 import { fireEvent, render, screen, waitFor } from '@testing-library/react-native';
 
 import App from '../App';
+import { preloadLogo } from '../src/components/ui';
+
+// Ensure logo is preloaded before first render in tests, so the Logo
+// component doesn't trigger a require() guard on the initial pass.
+beforeEach(() => preloadLogo());
 import { STORAGE_KEY } from '../src/store/storage';
 
 describe('M1 slice: onboarding to a saved day', () => {
@@ -18,6 +23,14 @@ describe('M1 slice: onboarding to a saved day', () => {
 
   it('builds a real plan, logs the day, and writes it to device storage', async () => {
     const view = await render(<App />);
+
+    // Ensure the logo is preloaded before the screens render, so the Logo
+    // component doesn't hit the require() guard during the first render pass.
+    preloadLogo();
+
+    // A new phone sees the account choice first. It is a choice, not a wall.
+    expect(await screen.findByText('Use without an account')).toBeTruthy();
+    await fireEvent.press(screen.getByText('Use without an account'));
 
     // Boot gate resolves into onboarding.
     expect(await screen.findByText(/Let's build your week/)).toBeTruthy();

@@ -4,14 +4,19 @@ import { StatusBar } from 'expo-status-bar';
 import { ActivityIndicator, StyleSheet, Text, View } from 'react-native';
 import { SafeAreaProvider } from 'react-native-safe-area-context';
 
+import { AuthProvider, useAuth } from './src/auth/AuthContext';
+import AccountScreen from './src/screens/AccountScreen';
+import AuthScreen from './src/screens/AuthScreen';
 import OnboardingScreen from './src/screens/OnboardingScreen';
+import DevicesScreen from './src/screens/DevicesScreen';
+import ImportScreen from './src/screens/ImportScreen';
 import TodayScreen from './src/screens/TodayScreen';
+import RunScreen from './src/screens/RunScreen';
+import RunSummaryScreen from './src/screens/RunSummaryScreen';
+import RunShareScreen from './src/screens/RunShareScreen';
 import { useAppStore } from './src/store/appStore';
+import type { RootStackParamList } from './src/navigation';
 import { colors, space, type as typeScale } from './src/theme';
-
-type RootStackParamList = {
-  Today: undefined;
-};
 
 const Stack = createNativeStackNavigator<RootStackParamList>();
 
@@ -42,14 +47,29 @@ function BootScreen() {
 
 function AppShell() {
   const { ready, state } = useAppStore();
+  const auth = useAuth();
 
-  if (!ready) return <BootScreen />;
+  if (!ready || auth.status === 'loading') return <BootScreen />;
+
+  /* An account is optional. A phone that already holds a training profile is
+     never forced through a sign-in wall; a new phone sees the choice once and
+     can continue without an account. */
+  const needsAuth =
+    auth.status === 'signedOut' && (auth.authOpen || (!auth.localOnly && !state.profile));
+  if (needsAuth) return <AuthScreen />;
+
   if (!state.profile) return <OnboardingScreen />;
 
   return (
     <NavigationContainer theme={navTheme}>
       <Stack.Navigator screenOptions={{ headerShown: false }}>
         <Stack.Screen name="Today" component={TodayScreen} />
+        <Stack.Screen name="Run" component={RunScreen} />
+        <Stack.Screen name="RunSummary" component={RunSummaryScreen} />
+        <Stack.Screen name="RunShare" component={RunShareScreen} />
+        <Stack.Screen name="Devices" component={DevicesScreen} />
+        <Stack.Screen name="Import" component={ImportScreen} />
+        <Stack.Screen name="Account" component={AccountScreen} />
       </Stack.Navigator>
     </NavigationContainer>
   );
@@ -59,7 +79,9 @@ export default function App() {
   return (
     <SafeAreaProvider>
       <StatusBar style="light" />
-      <AppShell />
+      <AuthProvider>
+        <AppShell />
+      </AuthProvider>
     </SafeAreaProvider>
   );
 }
