@@ -1,7 +1,1 @@
-{
-  "cleanUrls": true,
-  "trailingSlash": false,
-  "rewrites": [
-    { "source": "/download", "destination": "/download.html" }
-  ]
-}
+{"rewrites":[{"source":"/","destination":"/landing.html"}]}
