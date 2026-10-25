@@ -8,8 +8,10 @@
    implemented yet, and an unimplemented capability renders as unavailable
    rather than as a control that does nothing. */
 
-import { ScrollView, StyleSheet, Text, View } from 'react-native';
+import { Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
+import { useNavigation } from '@react-navigation/native';
+import type { NativeStackNavigationProp } from '@react-navigation/native-stack';
 
 import {
   effectivePlanDay,
@@ -20,14 +22,18 @@ import {
   nextPlannedSession,
   todayISO,
 } from '../domain';
-import { Banner, Card, Chip, SectionLabel } from '../components/ui';
+import { useAuth } from '../auth/AuthContext';
+import { Banner, Card, Chip, Logo, SectionLabel, preloadLogo } from '../components/ui';
 import { appStore, useAppStore } from '../store/appStore';
-import { colors, space, type as typeScale } from '../theme';
+import { colors, radius, space, type as typeScale } from '../theme';
+import type { RootStackParamList } from '../navigation';
 
 const DAY_NAMES = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'];
 
 export default function TodayScreen() {
   const { state, quarantine, storageError } = useAppStore();
+  const auth = useAuth();
+  const navigation = useNavigation<NativeStackNavigationProp<RootStackParamList>>();
 
   const profile = state.profile;
   const today = todayISO();
@@ -46,9 +52,32 @@ export default function TodayScreen() {
         showsVerticalScrollIndicator={false}
       >
         <View style={styles.header}>
-          <Text style={styles.brand}>LMTLSS</Text>
+          <Logo size={48} />
+          <View style={styles.headerText}>
+            <Text style={styles.brand}>LMTLSS</Text>
+            <Text style={styles.tagline}>TRAINING LOG</Text>
+          </View>
           <Text style={styles.date}>{fmtDateFull(today)}</Text>
         </View>
+
+        <Pressable
+          accessibilityRole="button"
+          accessibilityLabel="Account"
+          onPress={() => navigation.navigate('Account')}
+          style={({ pressed }) => [styles.accountStrip, pressed && styles.devicesPressed]}
+        >
+          <View style={styles.accountText}>
+            <Text style={styles.accountTitle}>
+              {auth.status === 'signedIn' ? 'Account' : 'Local only'}
+            </Text>
+            <Text style={styles.accountSub}>
+              {auth.status === 'signedIn'
+                ? `${auth.user?.email ?? 'Signed in'}${auth.isTempAccount ? ' (temp)' : ''} · cloud backup is not in this build yet`
+                : 'Your data stays on this phone. Sign in to create an account.'}
+            </Text>
+          </View>
+          <Text style={styles.accountChevron}>→</Text>
+        </Pressable>
 
         {storageError ? (
           <Banner
@@ -114,6 +143,24 @@ export default function TodayScreen() {
               <Text style={styles.empty}>No session planned. Finish setup to generate your week.</Text>
             </Card>
           )}
+        </View>
+
+        <View style={styles.section}>
+          <SectionLabel>Run</SectionLabel>
+          <Card>
+            <Text style={styles.cardTitle}>Start a run</Text>
+            <Text style={styles.cardSub}>
+              Record distance, time, pace, route with GPS. Save and share a Strava-like card.
+            </Text>
+            <Pressable
+              accessibilityRole="button"
+              accessibilityLabel="Start run"
+              onPress={() => navigation.navigate('Run')}
+              style={({ pressed }) => [styles.runButton, pressed && styles.runButtonPressed]}
+            >
+              <Text style={styles.runButtonText}>Start Run</Text>
+            </Pressable>
+          </Card>
         </View>
 
         <View style={styles.section}>
@@ -199,12 +246,24 @@ export default function TodayScreen() {
         <Text style={styles.footer}>
           Local-first: this week and today&apos;s entries live on this device only.
         </Text>
+
+        <Pressable
+          accessibilityRole="button"
+          accessibilityLabel="Devices and watches"
+          onPress={() => navigation.navigate('Devices')}
+          style={({ pressed }) => [styles.devicesLink, pressed && styles.devicesPressed]}
+        >
+          <Text style={styles.devicesLabel}>Devices &amp; watches</Text>
+          <Text style={styles.devicesSub}>What this build can and can&apos;t read →</Text>
+        </Pressable>
       </ScrollView>
     </SafeAreaView>
   );
 }
 
 /* Actions live in the store; these thin wrappers keep the JSX readable. */
+preloadLogo();
+
 function setReadiness(level: number) {
   appStore.logReadiness({ energy: level });
 }
@@ -222,12 +281,30 @@ const styles = StyleSheet.create({
     paddingTop: space.s3,
   },
   header: {
-    alignItems: 'baseline',
+    alignItems: 'center',
     flexDirection: 'row',
     justifyContent: 'space-between',
   },
+  headerText: {
+    alignItems: 'flex-start',
+    flexDirection: 'column',
+  },
   brand: { ...typeScale.micro, color: colors.text, letterSpacing: 3 },
-  date: { ...typeScale.small, color: colors.textMuted },
+  tagline: { ...typeScale.small, color: colors.textMuted, letterSpacing: 1.5 },
+  date: { ...typeScale.small, color: colors.textMuted, alignSelf: 'flex-end' },
+  accountStrip: {
+    alignItems: 'center',
+    borderColor: colors.border,
+    borderRadius: radius.md,
+    borderWidth: 1,
+    flexDirection: 'row',
+    gap: space.s3,
+    padding: space.s3,
+  },
+  accountText: { flex: 1, gap: 2 },
+  accountTitle: { ...typeScale.small, color: colors.text, fontWeight: '700' },
+  accountSub: { ...typeScale.small, color: colors.textMuted },
+  accountChevron: { ...typeScale.h2, color: colors.accent },
   greeting: { ...typeScale.title, color: colors.text },
   sub: { ...typeScale.small, color: colors.textSecondary, marginTop: space.s1 },
   section: { gap: space.s2 },
@@ -268,11 +345,36 @@ const styles = StyleSheet.create({
   planDay: { ...typeScale.small, color: colors.textMuted, width: 40 },
   planTitle: { ...typeScale.body, color: colors.text, flex: 1 },
   planMeta: { ...typeScale.small, color: colors.textMuted },
-  empty: { ...typeScale.small, color: colors.textMuted },
+  runButton: {
+    backgroundColor: colors.accent,
+    borderRadius: radius.sm,
+    paddingVertical: space.s3,
+    alignItems: 'center',
+    marginTop: space.s3,
+  },
+  runButtonPressed: {
+    opacity: 0.8,
+  },
+  runButtonText: {
+    ...typeScale.small,
+    color: colors.bg,
+    fontWeight: '700',
+  },
+});
   footer: {
     ...typeScale.small,
     color: colors.textMuted,
     lineHeight: 18,
     textAlign: 'center',
   },
+  devicesLink: {
+    borderColor: colors.border,
+    borderRadius: 12,
+    borderWidth: 1,
+    gap: space.s1,
+    padding: space.s4,
+  },
+  devicesPressed: { opacity: 0.7 },
+  devicesLabel: { ...typeScale.h2, color: colors.text },
+  devicesSub: { ...typeScale.small, color: colors.textMuted },
 });

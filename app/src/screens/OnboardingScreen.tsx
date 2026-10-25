@@ -19,7 +19,7 @@ import { SafeAreaView } from 'react-native-safe-area-context';
 
 import { EXPERIENCE_LABELS, GOAL_LABELS } from '../domain';
 import type { Experience, Goal } from '../../../shared/src/types';
-import { Chip, PrimaryButton, SectionLabel } from '../components/ui';
+import { Chip, Logo, PrimaryButton, SectionLabel, preloadLogo } from '../components/ui';
 import { appStore } from '../store/appStore';
 import { colors, radius, space, type as typeScale } from '../theme';
 
@@ -28,6 +28,15 @@ const EXPERIENCES: Experience[] = ['beginner', 'intermediate', 'advanced'];
 const SPORTS = [
   { id: 'strength', label: 'Strength training' },
   { id: 'running', label: 'Running' },
+  { id: 'cycling', label: 'Cycling' },
+  { id: 'swimming', label: 'Swimming' },
+  { id: 'walking', label: 'Walking' },
+  { id: 'hiking', label: 'Hiking' },
+  { id: 'calisthenics', label: 'Calisthenics' },
+  { id: 'hiit', label: 'HIIT / Circuit' },
+  { id: 'yoga', label: 'Yoga' },
+  { id: 'boxing', label: 'Boxing' },
+  { id: 'martial-arts', label: 'Martial Arts' },
 ];
 const EQUIPMENT = [
   { id: 'full-gym', label: 'Full gym' },
@@ -69,6 +78,8 @@ export default function OnboardingScreen() {
     });
   }
 
+    preloadLogo();
+
   function finish() {
     appStore.completeOnboarding({
       name,
@@ -91,10 +102,13 @@ export default function OnboardingScreen() {
         <ScrollView
           contentContainerStyle={styles.content}
           keyboardShouldPersistTaps="handled"
-          showsVerticalScrollIndicator={false}
-        >
-          <View style={styles.brandRow}>
-            <Text style={styles.brand}>LMTLSS</Text>
+          showsVerticalScrollIndicator={false}        >
+        <View style={styles.brandRow}>
+            <Logo size={48} />
+            <View style={styles.brandText}>
+              <Text style={styles.brand}>LMTLSS</Text>
+              <Text style={styles.tagline}>TRAINING LOG</Text>
+            </View>
             <Text style={styles.stepCount}>
               {step + 1} / {STEPS.length}
             </Text>
@@ -142,8 +156,8 @@ export default function OnboardingScreen() {
             <View style={styles.block}>
               <Text style={styles.h1}>How does your week look?</Text>
               <Text style={styles.lede}>
-                Days per week sets how the plan spaces sessions. Two sports are supported with real
-                depth today; others would be recorded but not programmed.
+                Days per week sets how the plan spaces sessions. Select one or more sports you want
+                to focus on.
               </Text>
 
               <View style={styles.field}>
@@ -266,7 +280,12 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     justifyContent: 'space-between',
   },
+  brandText: {
+    alignItems: 'flex-start',
+    flexDirection: 'column',
+  },
   brand: { ...typeScale.micro, color: colors.text, letterSpacing: 3 },
+  tagline: { ...typeScale.small, color: colors.textMuted, letterSpacing: 1.5 },
   stepCount: { ...typeScale.small, color: colors.textMuted },
   block: { gap: space.s5 },
   h1: { ...typeScale.title, color: colors.text, lineHeight: 28 },
